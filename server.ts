@@ -5,12 +5,6 @@ import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 
-try {
-  fs.writeFileSync(path.join(process.cwd(), "src", "server_boot.txt"), "Booting express server at: " + new Date().toISOString() + "\n");
-} catch (e) {
-  console.error(e);
-}
-
 dotenv.config();
 
 const app = express();
@@ -18,17 +12,6 @@ const PORT = 3000;
 
 // Set up large JSON payload limit for audio files
 app.use(express.json({ limit: "50mb" }));
-
-// Log requests to a file for runtime inspection
-app.use((req, res, next) => {
-  const logMessage = `[${new Date().toISOString()}] ${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}\n`;
-  try {
-    fs.appendFileSync(path.join(process.cwd(), "src", "server_requests.log"), logMessage);
-  } catch (err) {
-    console.error("Failed to write request log:", err);
-  }
-  next();
-});
 
 // Initialize the Google GenAI SDK
 const key = process.env.GEMINI_API_KEY;
