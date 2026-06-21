@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 
@@ -104,59 +104,131 @@ app.post("/api/track-phone", async (req, res) => {
       return res.status(400).json({ error: "Phone number and owner name are required values." });
     }
 
-    // Pre-calculate randomized but consistent mock tracking coordinates based on phone number seed
     const numSeed = phoneNumber.split("").reduce((acc: number, char: string) => acc + (parseInt(char, 10) || 0), 0);
-    
-    // Choose appropriate base coordinates centered on the selected target country
-    let baseLat = 37.7749;
-    let baseLng = -122.4194;
+
+    // Default base coordinates
+    let baseLat = country === "IN" ? 12.9716 : 37.7749;
+    let baseLng = country === "IN" ? 77.5946 : -122.4194;
+    let resolvedCity = country === "IN" ? "Bengaluru, Karnataka" : "San Francisco, CA";
+    let resolvedAddress = "";
+    let resolvedCarrier = carrier;
+    let resolvedDeviceModel = customDeviceModel;
     let isUsingClientLoc = false;
 
-    if (targetLat != null && targetLng != null && !isNaN(Number(targetLat)) && !isNaN(Number(targetLng))) {
-      baseLat = Number(targetLat);
-      baseLng = Number(targetLng);
-      isUsingClientLoc = true;
-    } else if (clientLat != null && clientLng != null && !isNaN(Number(clientLat)) && !isNaN(Number(clientLng))) {
-      baseLat = Number(clientLat);
-      baseLng = Number(clientLng);
-      isUsingClientLoc = true;
-    } else if (country === "IN") {
-      // Settle base coordinates around Bangalore, Karnataka, India
-      baseLat = 12.9716;
-      baseLng = 77.5946;
-    } else {
-      // Settle base coordinates around San Francisco, California, USA
-      baseLat = 37.7749;
-      baseLng = -122.4194;
+    // Call Gemini to geolocate the phone number's true region and form a matching highly realistic address
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const client = getGeminiClient();
+        const geminiPrompt = `
+Analyze the lost phone parameters to locate its precise registration location, cellular service circle, and physical footprint.
+Phone Number: ${phoneNumber}
+Selected Country Code: ${country} (US=United States, IN=India)
+Client-detected GPS/IP Coordinates (if any): Lat ${clientLat || "N/A"}, Lng ${clientLng || "N/A"}.
+
+Your absolute mandate is to resolve this to the most authentic, exact physical address:
+1. If the user is testing the app on their local device (indicated by a provided Client-detected GPS/IP Lat/Lng that falls within the target country), prioritize this exact coordinates (Lat ${clientLat}, Lng ${clientLng}) and geocode/identify its true local city, state, or county (such as Dallas, Georgia or Bengaluru, Karnataka) to give them their immediate actual physical address!
+2. If no Client-detected GPS/IP is provided or it doesn't match the selected country, analyze the phone number's area code or prefix series:
+   - For USA area codes: e.g. 770, 678, 470, 706 belong to Georgia, USA (Dallas, GA / Atlanta, GA). If it contains these area codes, you MUST localize the node precisely inside Dallas, GA area (latitude: 33.9237, longitude: -84.8408).
+   - Other USA area codes: e.g. 212/646/917 (New York, NY), 415/628 (San Francisco, CA), 310/213 (Los Angeles, CA), etc. Map them to their true physical city and state.
+   - For Indian numbers: Look up the mobile series telecom circle (e.g., 9845/9448 series is Karnataka (Bangalore), 9820/9819 is Mumbai, 9810 is Delhi, 9830 is West Bengal, etc.) and map it accurately to that region.
+3. Formulate a highly specific, genuine-looking, complete and localized physical street address (with correct street names, subdivisions, city, state, zip/postal code) that matches these coordinates. Do not return mock values or placeholders.
+
+Provide the response in the required JSON structure.
+`;
+
+        const geminiResponse = await client.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: geminiPrompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                city: { type: Type.STRING },
+                state: { type: Type.STRING },
+                latitude: { type: Type.NUMBER },
+                longitude: { type: Type.NUMBER },
+                address: { type: Type.STRING },
+                carrier: { type: Type.STRING },
+                deviceModel: { type: Type.STRING }
+              },
+              required: ["city", "latitude", "longitude", "address", "carrier", "deviceModel"]
+            }
+          }
+        });
+
+        if (geminiResponse.text) {
+          const result = JSON.parse(geminiResponse.text.trim());
+          if (result.latitude && result.longitude) {
+            baseLat = Number(result.latitude);
+            baseLng = Number(result.longitude);
+            resolvedCity = result.city;
+            resolvedAddress = result.address;
+            if (!resolvedCarrier) resolvedCarrier = result.carrier;
+            if (!resolvedDeviceModel) resolvedDeviceModel = result.deviceModel;
+            isUsingClientLoc = true;
+            console.log(`GSM Simulator: Gemini resolved phone mapping to ${resolvedCity} (${baseLat}, ${baseLng}) - Address: ${resolvedAddress}`);
+          }
+        }
+      } catch (e) {
+        console.warn("GSM Simulator: Gemini phone mapping failed, falling back to database geocoding:", e);
+      }
     }
 
-    // Translate small consistent offset based on seed to randomize precise coordinate lock
-    // For live client-side localization, keep the offset extremely compact so that it maps locally adjacent
-    const offsetFactor = isUsingClientLoc ? 0.00015 : 0.0006;
-    const offsetSub = isUsingClientLoc ? -0.0003 : -0.009;
+    // Traditional lookup / validation fallback if Gemini is unconfigured or fails
+    if (!resolvedAddress) {
+      if (targetLat != null && targetLng != null && !isNaN(Number(targetLat)) && !isNaN(Number(targetLng))) {
+        baseLat = Number(targetLat);
+        baseLng = Number(targetLng);
+        isUsingClientLoc = true;
+      } else if (clientLat != null && clientLng != null && !isNaN(Number(clientLat)) && !isNaN(Number(clientLng))) {
+        baseLat = Number(clientLat);
+        baseLng = Number(clientLng);
+        isUsingClientLoc = true;
+      } else if (country === "IN") {
+        baseLat = 12.9716;
+        baseLng = 77.5946;
+      } else {
+        // Look up area code check
+        const digits = phoneNumber.replace(/\D/g, "");
+        const last10 = digits.slice(-10);
+        const areaCode = last10.slice(0, 3);
+        if (country === "US" && ["770", "678", "470", "706"].includes(areaCode)) {
+          baseLat = 33.9237;
+          baseLng = -84.8408;
+          resolvedCity = "Dallas, Georgia";
+        } else {
+          baseLat = 37.7749;
+          baseLng = -122.4194;
+        }
+      }
+    }
 
-    const finalLat = baseLat + ((numSeed % 6) * offsetFactor) + offsetSub;
-    const finalLng = baseLng + ((numSeed % 6) * offsetFactor) + offsetSub;
+    // Precise coordinates offset simulation to represent live-tracking precision lock (keeping it adjacent)
+    const offsetFactor = isUsingClientLoc ? 0.00012 : 0.0004;
+    const offsetSub = isUsingClientLoc ? -0.0002 : -0.0006;
 
-    const mockCarrier = carrier || (country === "IN" 
-      ? ["Airtel India", "Jio Telecom", "Vodafone Idea", "BSNL India"][numSeed % 4]
-      : ["Verizon Wireless", "AT&T Mobililty", "T-Mobile US", "Vodafone", "Airtel"][numSeed % 5]);
+    const finalLat = baseLat + ((numSeed % 5) * offsetFactor) + offsetSub;
+    const finalLng = baseLng + ((numSeed % 5) * offsetFactor) + offsetSub;
 
-    const mockBattery = 15 + (numSeed % 76); // Between 15% and 90%
-    const mockAccuracy = 3 + (numSeed % 8); // accurate between 3m and 10m
-    const connectionType = mockBattery < 20 ? "Power Save Standby" : ["5G Ultra Wideband", "LTE Advanced", "Active Wi-Fi Link"][numSeed % 3];
-
-    const operatingSystem = "";
-    const finalDeviceModel = customDeviceModel || (numSeed % 2 === 0 
-      ? ["Samsung Galaxy S24 Ultra", "Google Pixel 8 Pro", "OnePlus 12"][numSeed % 3]
-      : ["iPhone 15 Pro Max", "iPhone 14 Pro", "iPhone 15 Plus"][numSeed % 3]);
-
-    // Retrieve exact reverse geocoding street address for coordinates
-    const currentAddress = await getReverseGeocode(finalLat, finalLng, country, false, numSeed);
+    // Use reverse geocoder to retrieve exact administrative OSM address for coordinates if address is not pre-populated by Gemini
+    const currentAddress = resolvedAddress || await getReverseGeocode(finalLat, finalLng, country, false, numSeed);
     
     const hist1Address = await getReverseGeocode(finalLat + 0.0016, finalLng - 0.0014, country, true, numSeed + 1);
     const hist2Address = await getReverseGeocode(finalLat - 0.0024, finalLng + 0.0022, country, true, numSeed + 2);
     const hist3Address = await getReverseGeocode(finalLat + 0.0005, finalLng + 0.0003, country, true, numSeed + 3);
+
+    const mockCarrier = resolvedCarrier || (country === "IN" 
+      ? ["Airtel India", "Jio Telecom", "Vodafone Idea", "BSNL India"][numSeed % 4]
+      : ["Verizon Wireless", "AT&T Mobility", "T-Mobile US", "UScellular"][numSeed % 4]);
+
+    const mockBattery = 18 + (numSeed % 67); // Between 18% and 85%
+    const mockAccuracy = 3 + (numSeed % 6); // accurate between 3m and 8m
+    const connectionType = mockBattery < 20 ? "Power Save Standby" : ["5G Ultra Wideband", "LTE Advanced", "Active Wi-Fi Link"][numSeed % 3];
+
+    const finalDeviceModel = resolvedDeviceModel || (numSeed % 2 === 0 
+      ? ["Samsung Galaxy S24 Ultra", "Google Pixel 8 Pro", "OnePlus 12"][numSeed % 3]
+      : ["iPhone 15 Pro Max", "iPhone 14 Pro", "iPhone 15 Plus"][numSeed % 3]);
 
     const responsePayload = {
       status: "active_tracking",
@@ -166,7 +238,7 @@ app.post("/api/track-phone", async (req, res) => {
         latitude: finalLat,
         longitude: finalLng,
         accuracyMeters: mockAccuracy,
-        altitudeMeters: 45 + (numSeed % 120),
+        altitudeMeters: 45 + (numSeed % 80),
         address: currentAddress,
         timestamp: new Date().toISOString(),
       },
@@ -174,12 +246,12 @@ app.post("/api/track-phone", async (req, res) => {
         batteryLevel: mockBattery,
         batteryState: mockBattery < 20 ? "Critical" : "Stable",
         carrier: mockCarrier,
-        networkStrengthDbm: -75 - (numSeed % 30), // e.g. -75 to -105 dBM
+        networkStrengthDbm: -72 - (numSeed % 26), 
         connectionType,
         imei: `35${numSeed}09281${numSeed % 10}57201`,
         simSerial: `890141032${numSeed % 9}46729184`,
-        tempCelsius: 28 + (numSeed % 10),
-        operatingSystem,
+        tempCelsius: 27 + (numSeed % 8),
+        operatingSystem: "",
         deviceModel: finalDeviceModel,
       },
       history: [
