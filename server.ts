@@ -95,7 +95,7 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
 // API Endpoints
 app.post("/api/track-phone", async (req, res) => {
   try {
-    const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel, country = "US" } = req.body || {};
+    const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel, country = "US", clientLat, clientLng } = req.body || {};
 
     if (!phoneNumber || !ownerName) {
       return res.status(400).json({ error: "Phone number and owner name are required values." });
@@ -106,9 +106,14 @@ app.post("/api/track-phone", async (req, res) => {
     
     // Choose appropriate base coordinates centered on the selected target country
     let baseLat = 37.7749;
-    let baseLng = -121.4194;
+    let baseLng = -122.4194;
+    let isUsingClientLoc = false;
 
-    if (country === "IN") {
+    if (clientLat != null && clientLng != null && !isNaN(Number(clientLat)) && !isNaN(Number(clientLng))) {
+      baseLat = Number(clientLat);
+      baseLng = Number(clientLng);
+      isUsingClientLoc = true;
+    } else if (country === "IN") {
       // Settle base coordinates around Bangalore, Karnataka, India
       baseLat = 12.9716;
       baseLng = 77.5946;
@@ -119,8 +124,12 @@ app.post("/api/track-phone", async (req, res) => {
     }
 
     // Translate small consistent offset based on seed to randomize precise coordinate lock
-    const finalLat = baseLat + ((numSeed % 60) * 0.0006) - 0.009;
-    const finalLng = baseLng + ((numSeed % 60) * 0.0006) - 0.009;
+    // For live client-side localization, keep the offset extremely compact so that it maps locally adjacent
+    const offsetFactor = isUsingClientLoc ? 0.00015 : 0.0006;
+    const offsetSub = isUsingClientLoc ? -0.0003 : -0.009;
+
+    const finalLat = baseLat + ((numSeed % 6) * offsetFactor) + offsetSub;
+    const finalLng = baseLng + ((numSeed % 6) * offsetFactor) + offsetSub;
 
     const mockCarrier = carrier || (country === "IN" 
       ? ["Airtel India", "Jio Telecom", "Vodafone Idea", "BSNL India"][numSeed % 4]

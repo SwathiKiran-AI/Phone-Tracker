@@ -1,6 +1,6 @@
 {
   "name": "Phone tracker",
   "description": "An interactive, high-fidelity secure lost phone locator and device telemetry dashboard, utilizing autonomous cellular handshakes and integrated with Gemini safety recovery guides.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
