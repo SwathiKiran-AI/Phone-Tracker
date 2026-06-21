@@ -98,7 +98,7 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
 // API Endpoints
 app.post("/api/track-phone", async (req, res) => {
   try {
-    const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel, country = "US", clientLat, clientLng } = req.body || {};
+    const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel, country = "US", clientLat, clientLng, targetLat, targetLng } = req.body || {};
 
     if (!phoneNumber || !ownerName) {
       return res.status(400).json({ error: "Phone number and owner name are required values." });
@@ -112,7 +112,11 @@ app.post("/api/track-phone", async (req, res) => {
     let baseLng = -122.4194;
     let isUsingClientLoc = false;
 
-    if (clientLat != null && clientLng != null && !isNaN(Number(clientLat)) && !isNaN(Number(clientLng))) {
+    if (targetLat != null && targetLng != null && !isNaN(Number(targetLat)) && !isNaN(Number(targetLng))) {
+      baseLat = Number(targetLat);
+      baseLng = Number(targetLng);
+      isUsingClientLoc = true;
+    } else if (clientLat != null && clientLng != null && !isNaN(Number(clientLat)) && !isNaN(Number(clientLng))) {
       baseLat = Number(clientLat);
       baseLng = Number(clientLng);
       isUsingClientLoc = true;

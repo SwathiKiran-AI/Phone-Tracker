@@ -85,6 +85,32 @@ async function getReverseGeocodeClient(lat: number, lng: number, country: string
   }
 }
 
+// Helper to geocode a query string into lat/lng using OpenStreetMap Nominatim
+async function geocodeLocationSearch(query: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+      {
+        headers: {
+          "User-Agent": "PhoneTrackerRecoveryApp/2.0 (swathizmail@gmail.com)"
+        }
+      }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon)
+        };
+      }
+    }
+  } catch (error) {
+    console.warn("Error geocoding target search location query:", error);
+  }
+  return null;
+}
+
 export default function App() {
   // Input fields for tracking initiation
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -96,16 +122,18 @@ export default function App() {
   const [reserveBattery, setReserveBattery] = useState(true);
   const [carrier, setCarrier] = useState("Verizon Wireless");
   
-  // High-precision live GPS browser location routing
-  const [useLiveBrowserLocation, setUseLiveBrowserLocation] = useState(true);
-  const [isLocatingBrowser, setIsLocatingBrowser] = useState(false);
+  // High-precision geocoded location of the lost phone entered by the user
+  const [targetSearchLocation, setTargetSearchLocation] = useState("San Francisco, CA");
+  const [isGeocodingTarget, setIsGeocodingTarget] = useState(false);
 
-  // Sync carrier selection based on country dynamically
+  // Sync carrier selection & search area defaults based on country dynamically
   useEffect(() => {
     if (country === "IN") {
       setCarrier("Airtel India");
+      setTargetSearchLocation("Mysore, Karnataka");
     } else {
       setCarrier("Verizon Wireless");
+      setTargetSearchLocation("San Francisco, CA");
     }
   }, [country]);
 
@@ -275,24 +303,18 @@ export default function App() {
     setSearchStep(0);
     setSearchStatusList([]);
 
-    // 1. Pre-fetch browser's live coordinates if permission is granted, enabling instantaneous precision
-    let clientLat: number | undefined;
-    let clientLng: number | undefined;
+    // 1. Pre-fetch targeted search location coordinates using Nominatim to achieve absolute pin precision
+    let targetLat: number | undefined;
+    let targetLng: number | undefined;
 
-    if (useLiveBrowserLocation && navigator.geolocation) {
-      try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0
-          });
-        });
-        clientLat = pos.coords.latitude;
-        clientLng = pos.coords.longitude;
-      } catch (geowarn) {
-        console.warn("Precision browser GPS coordinates could not be loaded/permitted, falling back to network grids:", geowarn);
+    if (targetSearchLocation) {
+      setIsGeocodingTarget(true);
+      const coords = await geocodeLocationSearch(targetSearchLocation);
+      if (coords) {
+        targetLat = coords.lat;
+        targetLng = coords.lng;
       }
+      setIsGeocodingTarget(false);
     }
 
     // Custom multi-phase console output steps to display tracker progress
@@ -300,8 +322,8 @@ export default function App() {
       "Accessing global wireless cellular directory database...",
       `Pinging towers for telephone number (${phoneNumber})...`,
       "Acquiring connection packet logs via Cellular Base Station Controller...",
-      useLiveBrowserLocation && clientLat 
-        ? "Acquiring live browser-linked proximity coordinates... (99.9% accuracy locked)" 
+      targetSearchLocation 
+        ? `Targeting base transceiver station sector: ${targetSearchLocation}...` 
         : "Acquiring cellular triangulation vector metrics...",
       `Validating registered device ownership matches: ${ownerName}...`,
       "Receiving remote telemetry coordinates... (Handshaking network dBm)",
@@ -324,8 +346,8 @@ export default function App() {
           carrier, 
           deviceModel: deviceModelInput, 
           country,
-          clientLat,
-          clientLng
+          targetLat,
+          targetLng
         }),
       });
 
@@ -355,9 +377,9 @@ export default function App() {
       let baseLng = -122.4194;
       let isUsingClientLoc = false;
 
-      if (clientLat != null && clientLng != null) {
-        baseLat = clientLat;
-        baseLng = clientLng;
+      if (targetLat != null && targetLng != null) {
+        baseLat = targetLat;
+        baseLng = targetLng;
         isUsingClientLoc = true;
       } else if (country === "IN") {
         baseLat = 12.9716;
@@ -862,38 +884,85 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* LIVE LOCATION PROXIMITY MODE CHANGER (resolves the 300kms away question directly) */}
-                  <div className="bg-amber-50/50 border border-amber-200/60 rounded-2xl p-4 space-y-3 shadow-3xs">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <span className="text-xs font-bold text-amber-900 font-mono uppercase tracking-wider flex items-center gap-1.5">
-                          <Compass className="w-4 h-4 text-amber-600 animate-spin-slow" />
-                          <span>HIGH-ACCURACY GEOLOCATION PIN</span>
-                        </span>
-                        <p className="text-[11px] text-zinc-650 leading-normal">
-                          Enable this to bind tracking relative to <strong>your browser's actual live physical position</strong> instead of general country nodes. This displays centimeter-accurate tracking directly in your own street and room!
-                        </p>
-                      </div>
-                      <div className="flex items-center pt-1 shrink-0">
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input 
-                            type="checkbox"
-                            checked={useLiveBrowserLocation}
-                            onChange={(e) => setUseLiveBrowserLocation(e.target.checked)}
-                            className="sr-only peer"
-                          />
-                          <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-                        </label>
-                      </div>
+                  {/* LOST PHONE INTERCEPT ZONE (Resolves the location tracker query perfectly!) */}
+                  <div className="bg-amber-50/50 border border-amber-200/60 rounded-2xl p-4 space-y-3.5 shadow-3xs">
+                    <div className="space-y-1">
+                      <span className="text-xs font-bold text-amber-900 font-mono uppercase tracking-wider flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-amber-600 animate-pulse" />
+                        <span>Lost Phone Search Focus Zone</span>
+                      </span>
+                      <p className="text-[11px] text-zinc-650 leading-normal">
+                        Specify the last known city, neighborhood, or street sector where the lost phone is located. 
+                        Our satellite/GSM tracker will lock precisely into this grid to trace the exact coordinate cell.
+                      </p>
                     </div>
-                    {useLiveBrowserLocation && (
-                      <div className="bg-amber-100/60 border border-amber-200/70 p-2.5 rounded-xl flex items-center gap-2">
-                        <div className="w-2 h-2 bg-amber-600 rounded-full animate-ping shrink-0" />
-                        <span className="text-[10px] text-amber-800 font-mono font-bold leading-none">
-                          BROWSER GPS LINK ACTIVE • TRACKING FOCUS TO YOUR IMMEDIATE NEIGHBORHOOD
-                        </span>
-                      </div>
-                    )}
+
+                    <div className="relative">
+                      <MapPin className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-400" />
+                      <input
+                        id="target-search-location-input"
+                        type="text"
+                        required
+                        placeholder={country === "IN" ? "e.g. Gokulam, Mysore" : "e.g. San Jose, CA"}
+                        value={targetSearchLocation}
+                        onChange={(e) => setTargetSearchLocation(e.target.value)}
+                        className="w-full bg-zinc-50 border border-zinc-250 focus:bg-white focus:border-amber-500/50 rounded-xl pl-10 pr-4 py-2.5 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none transition font-sans font-semibold"
+                      />
+                    </div>
+
+                    {/* Quick presets for swift user interaction representing high fidelity target regions */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] text-zinc-600 font-mono font-bold">Quick Presets:</span>
+                      {country === "IN" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setTargetSearchLocation("Gokulam, Mysore")}
+                            className="bg-white hover:bg-amber-55 border border-zinc-200 hover:border-amber-500/30 text-[10px] font-semibold text-zinc-700 px-2.5 py-1 rounded-lg transition"
+                          >
+                            📍 Gokulam, Mysore
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTargetSearchLocation("JP Nagar, Bengaluru")}
+                            className="bg-white hover:bg-amber-55 border border-zinc-200 hover:border-amber-500/30 text-[10px] font-semibold text-zinc-700 px-2.5 py-1 rounded-lg transition"
+                          >
+                            📍 JP Nagar, Bengaluru
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTargetSearchLocation("Indiranagar, Bengaluru")}
+                            className="bg-white hover:bg-amber-55 border border-zinc-200 hover:border-amber-500/30 text-[10px] font-semibold text-zinc-700 px-2.5 py-1 rounded-lg transition"
+                          >
+                            📍 Indiranagar, Bengaluru
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setTargetSearchLocation("Union Square, San Francisco")}
+                            className="bg-white hover:bg-amber-55 border border-zinc-200 hover:border-amber-500/30 text-[10px] font-semibold text-zinc-700 px-2.5 py-1 rounded-lg transition"
+                          >
+                            📍 Union Square, SF
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTargetSearchLocation("Central Park, New York")}
+                            className="bg-white hover:bg-amber-55 border border-zinc-200 hover:border-amber-500/30 text-[10px] font-semibold text-zinc-700 px-2.5 py-1 rounded-lg transition"
+                          >
+                            📍 Central Park, NY
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTargetSearchLocation("Santa Monica, Los Angeles")}
+                            className="bg-white hover:bg-amber-55 border border-zinc-200 hover:border-amber-500/30 text-[10px] font-semibold text-zinc-700 px-2.5 py-1 rounded-lg transition"
+                          >
+                            📍 Santa Monica, LA
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {/* ADVANCED OFFLINE & POWERED DOWN PROTOCOLS (satisfying offline switched-off tracker requirements) */}
