@@ -352,6 +352,12 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
           <span className="text-zinc-500 uppercase">Precision:</span>
           <span className="font-bold text-amber-600 animate-pulse">±{location.accuracyMeters} METERS</span>
         </div>
+        {location.address && (
+          <div className="border-t border-zinc-100 pt-1 mt-1 text-[9px] text-zinc-650 flex flex-col gap-0.5">
+            <span className="text-zinc-400 font-bold uppercase tracking-wide">PHYSICAL ADDRESS:</span>
+            <span className="font-bold text-zinc-800 leading-normal line-clamp-2">{location.address}</span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ export interface TrackingLocation {
   longitude: number;
   accuracyMeters: number;
   altitudeMeters: number;
+  address?: string;
   timestamp: string;
 }
 

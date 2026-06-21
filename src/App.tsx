@@ -239,7 +239,7 @@ export default function App() {
       const response = await fetch("/api/track-phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber, ownerName, carrier, deviceModel: deviceModelInput }),
+        body: JSON.stringify({ phoneNumber, ownerName, carrier, deviceModel: deviceModelInput, country }),
       });
 
       let data;
@@ -263,25 +263,56 @@ export default function App() {
       
       // Calculate randomized but consistent mock tracking coordinates based on phone number seed (identical to server.ts)
       const numSeed = phoneNumber.split("").reduce((acc: number, char: string) => acc + (parseInt(char, 10) || 0), 0);
-      const baseLat = 37.7749 + (numSeed % 100) * 0.001 - 0.05;
-      const baseLng = -122.4194 + (numSeed % 150) * 0.001 - 0.05;
-      const mockCarrier = carrier || ["Verizon Wireless", "AT&T Mobililty", "T-Mobile US", "Vodafone", "Airtel"][numSeed % 5];
+      
+      let baseLat = 37.7749;
+      let baseLng = -122.4194;
+
+      if (country === "IN") {
+        baseLat = 12.9716;
+        baseLng = 77.5946;
+      }
+
+      const finalLat = baseLat + ((numSeed % 60) * 0.0006) - 0.009;
+      const finalLng = baseLng + ((numSeed % 60) * 0.0006) - 0.009;
+
+      const mockCarrier = carrier || (country === "IN"
+        ? ["Airtel India", "Jio Telecom", "Vodafone Idea", "BSNL India"][numSeed % 4]
+        : ["Verizon Wireless", "AT&T Mobililty", "T-Mobile US", "Vodafone", "Airtel"][numSeed % 5]);
+
       const mockBattery = 15 + (numSeed % 76);
-      const mockAccuracy = 3 + (numSeed % 12);
+      const mockAccuracy = 3 + (numSeed % 8);
       const connectionType = mockBattery < 20 ? "Power Save Standby" : ["5G Ultra Wideband", "LTE Advanced", "Active Wi-Fi Link"][numSeed % 3];
       const finalDeviceModel = deviceModelInput || (numSeed % 2 === 0 
         ? ["Samsung Galaxy S24 Ultra", "Google Pixel 8 Pro", "OnePlus 12"][numSeed % 3]
         : ["iPhone 15 Pro Max", "iPhone 14 Pro", "iPhone 15 Plus"][numSeed % 3]);
+
+      let mockAddress = "";
+      let mockHist1 = "";
+      let mockHist2 = "";
+      let mockHist3 = "";
+
+      if (country === "IN") {
+        mockAddress = `${12 + (numSeed % 180)}, CMH Road, Lakshmipuram, Indiranagar, Bengaluru, Karnataka 560038, India`;
+        mockHist1 = "Prestige Plaza, MG Road, Ashok Nagar, Bengaluru, Karnataka 560001, India";
+        mockHist2 = "Brigade Road intersection, Tasker Town, Ashok Nagar, Bengaluru, Karnataka 560025, India";
+        mockHist3 = "100 Feet Rd, Hal 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038, India";
+      } else {
+        mockAddress = `${100 + (numSeed % 850)} Dolores St, San Francisco, CA 94110, USA`;
+        mockHist1 = "Golden Gate Park, San Francisco, CA 94122, USA";
+        mockHist2 = "Union Square, 333 Post St, San Francisco, CA 94108, USA";
+        mockHist3 = "PIER 39, Embarcadero, San Francisco, CA 94133, USA";
+      }
 
       const fallbackPayload = {
         status: "active_tracking",
         ownerName,
         phoneNumber,
         location: {
-          latitude: baseLat,
-          longitude: baseLng,
+          latitude: finalLat,
+          longitude: finalLng,
           accuracyMeters: mockAccuracy,
           altitudeMeters: 45 + (numSeed % 120),
+          address: mockAddress,
           timestamp: new Date().toISOString(),
         },
         telemetry: {
@@ -297,9 +328,9 @@ export default function App() {
           deviceModel: finalDeviceModel,
         },
         history: [
-          { timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), address: "Near local communication hub", latitude: baseLat + 0.0012, longitude: baseLng - 0.0008 },
-          { timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), address: "Standard cellular intersection node", latitude: baseLat - 0.002, longitude: baseLng + 0.0015 },
-          { timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), address: "Primary registered owner residence", latitude: baseLat + 0.0004, longitude: baseLng + 0.0001 }
+          { timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), address: mockHist1, latitude: finalLat + 0.0016, longitude: finalLng - 0.0014 },
+          { timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), address: mockHist2, latitude: finalLat - 0.0024, longitude: finalLng + 0.0022 },
+          { timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), address: mockHist3, latitude: finalLat + 0.0005, longitude: finalLng + 0.0003 }
         ]
       };
 
@@ -939,6 +970,26 @@ export default function App() {
                     <TrackingMap location={trackingInfo.location} ownerName={trackingInfo.ownerName} />
                   )}
                 </div>
+
+                {/* Physical Address banner overlay */}
+                {!isDeviceWiped && trackingInfo.location.address && (
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 shadow-xs">
+                    <div className="p-2 bg-amber-500/10 rounded-lg shrink-0 mt-0.5">
+                      <MapPin className="w-5 h-5 text-amber-600 animate-bounce" />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-mono font-bold text-amber-800 uppercase tracking-wider block">
+                        CURRENT PRECISE PHYSICAL ADDRESS INTEL
+                      </span>
+                      <p className="text-sm font-bold text-zinc-900 leading-snug">
+                        {trackingInfo.location.address}
+                      </p>
+                      <p className="text-[10px] text-zinc-500 font-mono">
+                        TRILATERATED AT: {new Date(trackingInfo.location.timestamp).toLocaleTimeString()} • ACCURACY TO ±{trackingInfo.location.accuracyMeters} METERS
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Telemetry data info blocks */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
