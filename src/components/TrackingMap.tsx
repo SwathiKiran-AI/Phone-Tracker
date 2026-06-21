@@ -253,109 +253,116 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
   }, []);
 
   return (
-    <div ref={containerRef} className="relative w-full h-[330px] rounded-2xl border border-zinc-200 bg-zinc-150 overflow-hidden shadow-sm flex flex-col justify-end">
-      
-      {/* Dynamic Leaflet Target Map Base */}
-      <div 
-        ref={mapContainerRef} 
-        className="absolute inset-0 z-0 bg-zinc-900" 
-        style={{ width: "100%", height: "100%" }}
-      />
+    <div className="flex flex-col gap-4">
+      {/* Map Viewer Box */}
+      <div ref={containerRef} className="relative w-full h-[320px] rounded-2xl border border-zinc-200 bg-zinc-950 overflow-hidden shadow-sm flex flex-col justify-end">
+        {/* Dynamic Leaflet Target Map Base */}
+        <div 
+          ref={mapContainerRef} 
+          className="absolute inset-0 z-0 bg-zinc-900" 
+          style={{ width: "100%", height: "100%" }}
+        />
 
-      {/* Military Sweeping & Triangulation radar lines overlay */}
-      <canvas
-        ref={canvasRef}
-        className="pointer-events-none absolute inset-0 z-10 w-full h-full object-cover"
-      />
+        {/* Military Sweeping & Triangulation radar lines overlay */}
+        <canvas
+          ref={canvasRef}
+          className="pointer-events-none absolute inset-0 z-10 w-full h-full object-cover"
+        />
 
-      {/* Top Left Status Info overlay */}
-      <div className="absolute top-3 left-3 bg-white/95 border border-zinc-200 px-3 py-1.5 rounded-xl flex items-center space-x-2 shadow-sm backdrop-blur-md z-20 transition">
-        <Navigation className="w-4 h-4 text-amber-500 animate-pulse rotate-45" />
-        <div>
-          <span className="text-[9px] font-mono font-bold text-zinc-800 uppercase tracking-wider block">
-            {mapMode === "standard" ? "TOKYO-US VECTOR LAND GRID" : mapMode === "satellite" ? "LIVE TELEMETRY COLD SATELLITE" : "AUTONOMOUS TRILATERATION FEED"}
+        {/* Top Left Status Info overlay */}
+        <div className="absolute top-3 left-3 bg-white/95 border border-zinc-200 px-3 py-1.5 rounded-xl flex items-center space-x-2 shadow-sm backdrop-blur-md z-20 transition">
+          <Navigation className="w-4 h-4 text-amber-500 animate-pulse rotate-45" />
+          <div>
+            <span className="text-[9px] font-mono font-bold text-zinc-900 uppercase tracking-wider block">
+              {mapMode === "standard" ? "TOKYO-US VECTOR LAND GRID" : mapMode === "satellite" ? "LIVE TELEMETRY COLD SATELLITE" : "AUTONOMOUS TRILATERATION FEED"}
+            </span>
+            <span className="text-[8px] text-zinc-500 font-mono block">SIGNAL MAPPED VIA HYBRID LOCALIZATION PIN</span>
+          </div>
+        </div>
+
+        {/* Map Mode selector buttons */}
+        <div className="absolute top-3 right-3 bg-white/95 border border-zinc-200 p-1 rounded-xl flex items-center space-x-0.5 shadow-sm backdrop-blur-md z-20">
+          <button
+            onClick={() => setMapMode("standard")}
+            className={`px-2.5 py-1 text-[10px] uppercase font-bold rounded-lg transition-all font-mono cursor-pointer ${
+              mapMode === "standard"
+                ? "bg-amber-500 text-zinc-950 shadow-xs"
+                : "text-zinc-650 hover:bg-zinc-100"
+            }`}
+          >
+            Grid
+          </button>
+          <button
+            onClick={() => setMapMode("satellite")}
+            className={`px-2.5 py-1 text-[10px] uppercase font-bold rounded-lg transition-all font-mono cursor-pointer ${
+              mapMode === "satellite"
+                ? "bg-amber-500 text-zinc-950 shadow-xs"
+                : "text-zinc-650 hover:bg-zinc-100"
+            }`}
+          >
+            Satellite
+          </button>
+          <button
+            onClick={() => setMapMode("hybrid")}
+            className={`px-2.5 py-1 text-[10px] uppercase font-bold rounded-lg transition-all font-mono cursor-pointer ${
+              mapMode === "hybrid"
+                ? "bg-amber-500 text-zinc-950 shadow-xs"
+                : "text-zinc-650 hover:bg-zinc-100"
+            }`}
+          >
+            Hybrid
+          </button>
+        </div>
+
+        {/* Zoom control buttons */}
+        <div className="absolute bottom-3 right-3 flex items-center space-x-1.5 z-20">
+          <button
+            onClick={() => setZoom((prev) => Math.min(prev + 0.6, 6.0))}
+            className="p-1.5 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 hover:text-amber-500 rounded-lg shadow-sm transition cursor-pointer"
+            title="Zoom In"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setZoom((prev) => Math.max(prev - 0.6, 1.2))}
+            className="p-1.5 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 hover:text-amber-500 rounded-lg shadow-sm transition cursor-pointer"
+            title="Zoom Out"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Target coordinates and diagnostic data panel - RENDERED OUTSIDE (BELOW) THE MAP FOR 100% UNOBSTRUCTED READABILITY! */}
+      <div className="bg-white border border-zinc-200 px-4 py-3.5 rounded-2xl text-[11px] font-mono text-zinc-700 shadow-xs space-y-2.5 block">
+        <div className="font-bold text-xs text-zinc-900 border-b border-zinc-100 pb-2 mb-1 flex items-center justify-between">
+          <span className="tracking-tight text-zinc-900">GPS TELEMETRY TARGET FEED</span>
+          <span className="text-[10px] text-amber-600 px-2 py-0.5 bg-amber-50 rounded-md border border-amber-200/50 uppercase tracking-wider animate-pulse">
+            Locked Online
           </span>
-          <span className="text-[8px] text-zinc-500 font-mono block">SIGNAL MAPPED VIA HYBRID LOCALIZATION PIN</span>
         </div>
-      </div>
-
-      {/* Map Mode selector buttons */}
-      <div className="absolute top-3 right-3 bg-white/95 border border-zinc-200 p-1 rounded-xl flex items-center space-x-0.5 shadow-sm backdrop-blur-md z-20">
-        <button
-          onClick={() => setMapMode("standard")}
-          className={`px-2.5 py-1 text-[10px] uppercase font-bold rounded-lg transition-all font-mono cursor-pointer ${
-            mapMode === "standard"
-              ? "bg-amber-500 text-zinc-950 shadow-xs"
-              : "text-zinc-600 hover:bg-zinc-100"
-          }`}
-        >
-          Grid
-        </button>
-        <button
-          onClick={() => setMapMode("satellite")}
-          className={`px-2.5 py-1 text-[10px] uppercase font-bold rounded-lg transition-all font-mono cursor-pointer ${
-            mapMode === "satellite"
-              ? "bg-amber-500 text-zinc-950 shadow-xs"
-              : "text-zinc-600 hover:bg-zinc-100"
-          }`}
-        >
-          Satellite
-        </button>
-        <button
-          onClick={() => setMapMode("hybrid")}
-          className={`px-2.5 py-1 text-[10px] uppercase font-bold rounded-lg transition-all font-mono cursor-pointer ${
-            mapMode === "hybrid"
-              ? "bg-amber-500 text-zinc-950 shadow-xs"
-              : "text-zinc-600 hover:bg-zinc-100"
-          }`}
-        >
-          Hybrid
-        </button>
-      </div>
-
-      {/* Zoom control buttons */}
-      <div className="absolute bottom-3 right-3 flex items-center space-x-1.5 z-20">
-        <button
-          onClick={() => setZoom((prev) => Math.min(prev + 0.6, 6.0))}
-          className="p-1.5 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 hover:text-amber-500 rounded-lg shadow-sm transition cursor-pointer"
-          title="Zoom In"
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => setZoom((prev) => Math.max(prev - 0.6, 1.2))}
-          className="p-1.5 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 hover:text-amber-500 rounded-lg shadow-sm transition cursor-pointer"
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Target coordinates and diagnostic data panel under-lay */}
-      <div className="absolute bottom-3 left-3 bg-white/95 border border-zinc-200 px-3 py-2 rounded-xl text-[10px] font-mono text-zinc-700 shadow-sm z-20 backdrop-blur-md space-y-1 block max-w-[280px]">
-        <div className="font-bold text-zinc-900 border-b border-zinc-100 pb-1 mb-1">
-          GPS TELEMETRY TARGET
-        </div>
-        <div className="flex justify-between gap-4">
-          <span className="text-zinc-500 uppercase">Marker:</span>
-          <span className="font-bold text-zinc-800">{ownerName}'s Lost Phone</span>
-        </div>
-        <div className="flex justify-between gap-4">
-          <span className="text-zinc-500 uppercase">Latitude:</span>
-          <span className="font-bold text-zinc-800">{location.latitude.toFixed(6)}</span>
-        </div>
-        <div className="flex justify-between gap-4">
-          <span className="text-zinc-500 uppercase">Longitude:</span>
-          <span className="font-bold text-zinc-800">{location.longitude.toFixed(6)}</span>
-        </div>
-        <div className="flex justify-between gap-4">
-          <span className="text-zinc-500 uppercase">Precision:</span>
-          <span className="font-bold text-amber-600 animate-pulse">±{location.accuracyMeters} METERS</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-zinc-650 font-mono">
+          <div className="flex justify-between items-center py-1 border-b border-dashed border-zinc-100 sm:border-0">
+            <span className="text-zinc-400 uppercase tracking-wider">Device ID Marker:</span>
+            <span className="font-bold text-zinc-805 text-zinc-800 font-sans">{ownerName}'s Lost Phone</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-dashed border-zinc-100 sm:border-0">
+            <span className="text-zinc-400 uppercase tracking-wider">Estimated Precision Check:</span>
+            <span className="font-bold text-amber-600">±{location.accuracyMeters} METERS</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-dashed border-zinc-100 sm:border-0">
+            <span className="text-zinc-400 uppercase tracking-wider">Physical Latitude:</span>
+            <span className="font-bold text-zinc-800 text-[11px]">{location.latitude.toFixed(6)}</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-dashed border-zinc-100 sm:border-0">
+            <span className="text-zinc-400 uppercase tracking-wider">Physical Longitude:</span>
+            <span className="font-bold text-zinc-800 text-[11px]">{location.longitude.toFixed(6)}</span>
+          </div>
         </div>
         {location.address && (
-          <div className="border-t border-zinc-100 pt-1 mt-1 text-[9px] text-zinc-650 flex flex-col gap-0.5">
-            <span className="text-zinc-400 font-bold uppercase tracking-wide">PHYSICAL ADDRESS:</span>
-            <span className="font-bold text-zinc-800 leading-normal line-clamp-2">{location.address}</span>
+          <div className="border-t border-zinc-200 pt-2.5 mt-1 text-[10px] flex flex-col gap-1">
+            <span className="text-zinc-400 font-bold uppercase tracking-wider">CONFIRMED PHYSICAL STREET ADDRESS:</span>
+            <span className="font-bold text-zinc-800 text-[12.5px] font-sans leading-relaxed">{location.address}</span>
           </div>
         )}
       </div>

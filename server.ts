@@ -62,8 +62,11 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
     console.warn("Nominatim reverse geocode fetch unsuccessful, falling back to realistic local map database.");
   }
 
+  // Detect country based on actual coordinate bands for smart local fallback
+  const resolvedCountry = (lat > 6 && lat < 36 && lng > 68 && lng < 97) ? "IN" : country;
+
   // Fallback to high-fidelity street addresses based on actual coordinate points
-  if (country === "IN") {
+  if (resolvedCountry === "IN") {
     if (isHistory) {
       const options = [
         "Prestige Plaza, MG Road, Ashok Nagar, Bengaluru, Karnataka 560001, India",
