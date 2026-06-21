@@ -243,7 +243,18 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Unable to contact cellular telemetry endpoint. Please try again.");
+        let errMsg = "Unable to contact cellular telemetry endpoint. Please try again.";
+        try {
+          const errData = await response.json();
+          if (errData && errData.error) {
+            errMsg = `${errData.error}`;
+          } else if (errData && errData.message) {
+            errMsg = `${errData.message}`;
+          }
+        } catch (e) {
+          errMsg = `Telemetry server returned status ${response.status}: Unable to contact cellular telemetry endpoint.`;
+        }
+        throw new Error(errMsg);
       }
 
       const data = await response.json();

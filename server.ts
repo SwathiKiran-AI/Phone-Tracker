@@ -41,60 +41,65 @@ try {
 
 // API Endpoints
 app.post("/api/track-phone", (req, res) => {
-  const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel } = req.body;
+  try {
+    const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel } = req.body || {};
 
-  if (!phoneNumber || !ownerName) {
-    return res.status(400).json({ error: "Phone number and owner name are required values." });
+    if (!phoneNumber || !ownerName) {
+      return res.status(400).json({ error: "Phone number and owner name are required values." });
+    }
+
+    // Pre-calculate randomized but consistent mock tracking coordinates based on phone number seed
+    const numSeed = phoneNumber.split("").reduce((acc: number, char: string) => acc + (parseInt(char, 10) || 0), 0);
+    
+    // Base coordinates around a general central city or random area
+    const baseLat = 37.7749 + (numSeed % 100) * 0.001 - 0.05;
+    const baseLng = -122.4194 + (numSeed % 150) * 0.001 - 0.05;
+
+    const mockCarrier = carrier || ["Verizon Wireless", "AT&T Mobililty", "T-Mobile US", "Vodafone", "Airtel"][numSeed % 5];
+    const mockBattery = 15 + (numSeed % 76); // Between 15% and 90%
+    const mockAccuracy = 3 + (numSeed % 12); // accurate between 3m and 15m
+    const connectionType = mockBattery < 20 ? "Power Save Standby" : ["5G Ultra Wideband", "LTE Advanced", "Active Wi-Fi Link"][numSeed % 3];
+
+    const operatingSystem = "";
+    const finalDeviceModel = customDeviceModel || (numSeed % 2 === 0 
+      ? ["Samsung Galaxy S24 Ultra", "Google Pixel 8 Pro", "OnePlus 12"][numSeed % 3]
+      : ["iPhone 15 Pro Max", "iPhone 14 Pro", "iPhone 15 Plus"][numSeed % 3]);
+
+    const responsePayload = {
+      status: "active_tracking",
+      ownerName,
+      phoneNumber,
+      location: {
+        latitude: baseLat,
+        longitude: baseLng,
+        accuracyMeters: mockAccuracy,
+        altitudeMeters: 45 + (numSeed % 120),
+        timestamp: new Date().toISOString(),
+      },
+      telemetry: {
+        batteryLevel: mockBattery,
+        batteryState: mockBattery < 20 ? "Critical" : "Stable",
+        carrier: mockCarrier,
+        networkStrengthDbm: -75 - (numSeed % 30), // e.g. -75 to -105 dBM
+        connectionType,
+        imei: `35${numSeed}09281${numSeed % 10}57201`,
+        simSerial: `890141032${numSeed % 9}46729184`,
+        tempCelsius: 28 + (numSeed % 10),
+        operatingSystem,
+        deviceModel: finalDeviceModel,
+      },
+      history: [
+        { timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), address: "Near local communication hub", latitude: baseLat + 0.0012, longitude: baseLng - 0.0008 },
+        { timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), address: "Standard cellular intersection node", latitude: baseLat - 0.002, longitude: baseLng + 0.0015 },
+        { timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), address: "Primary registered owner residence", latitude: baseLat + 0.0004, longitude: baseLng + 0.0001 }
+      ]
+    };
+
+    return res.json(responsePayload);
+  } catch (error: any) {
+    console.error("Error in /api/track-phone endpoint:", error);
+    return res.status(500).json({ error: error.message || "An internal error occurred while tracking this device." });
   }
-
-  // Pre-calculate randomized but consistent mock tracking coordinates based on phone number seed
-  const numSeed = phoneNumber.split("").reduce((acc: number, char: string) => acc + (parseInt(char, 10) || 0), 0);
-  
-  // Base coordinates around a general central city or random area
-  const baseLat = 37.7749 + (numSeed % 100) * 0.001 - 0.05;
-  const baseLng = -122.4194 + (numSeed % 150) * 0.001 - 0.05;
-
-  const mockCarrier = carrier || ["Verizon Wireless", "AT&T Mobililty", "T-Mobile US", "Vodafone", "Airtel"][numSeed % 5];
-  const mockBattery = 15 + (numSeed % 76); // Between 15% and 90%
-  const mockAccuracy = 3 + (numSeed % 12); // accurate between 3m and 15m
-  const connectionType = mockBattery < 20 ? "Power Save Standby" : ["5G Ultra Wideband", "LTE Advanced", "Active Wi-Fi Link"][numSeed % 3];
-
-  const operatingSystem = "";
-  const finalDeviceModel = customDeviceModel || (numSeed % 2 === 0 
-    ? ["Samsung Galaxy S24 Ultra", "Google Pixel 8 Pro", "OnePlus 12"][numSeed % 3]
-    : ["iPhone 15 Pro Max", "iPhone 14 Pro", "iPhone 15 Plus"][numSeed % 3]);
-
-  const responsePayload = {
-    status: "active_tracking",
-    ownerName,
-    phoneNumber,
-    location: {
-      latitude: baseLat,
-      longitude: baseLng,
-      accuracyMeters: mockAccuracy,
-      altitudeMeters: 45 + (numSeed % 120),
-      timestamp: new Date().toISOString(),
-    },
-    telemetry: {
-      batteryLevel: mockBattery,
-      batteryState: mockBattery < 20 ? "Critical" : "Stable",
-      carrier: mockCarrier,
-      networkStrengthDbm: -75 - (numSeed % 30), // e.g. -75 to -105 dBM
-      connectionType,
-      imei: `35${numSeed}09281${numSeed % 10}57201`,
-      simSerial: `890141032${numSeed % 9}46729184`,
-      tempCelsius: 28 + (numSeed % 10),
-      operatingSystem,
-      deviceModel: finalDeviceModel,
-    },
-    history: [
-      { timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), address: "Near local communication hub", latitude: baseLat + 0.0012, longitude: baseLng - 0.0008 },
-      { timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), address: "Standard cellular intersection node", latitude: baseLat - 0.002, longitude: baseLng + 0.0015 },
-      { timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), address: "Primary registered owner residence", latitude: baseLat + 0.0004, longitude: baseLng + 0.0001 }
-    ]
-  };
-
-  return res.json(responsePayload);
 });
 
 app.post("/api/tracker-chat", async (req, res) => {
