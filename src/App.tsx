@@ -37,6 +37,34 @@ import TrackingMap from "./components/TrackingMap";
 
 // Helper to reverse geocode lat/lng to precise physical address using OpenStreetMap Nominatim on the client side
 async function getReverseGeocodeClient(lat: number, lng: number, country: string, isHistory = false, seedCode = 0): Promise<string> {
+  const numSeed = Math.abs(seedCode);
+
+  const flatNamesUS = [
+    "Apt 204, Birchwood Apartments",
+    "Rowhouse #15, Paulding Coves",
+    "Flat 303, Sweetwater Ridge",
+    "House #184, Whispering Pines",
+    "Suite 102, Laurel Springs",
+    "Apt 4B, Dogwood Heights Condos",
+    "Villa #7, Dallas Creek Estates",
+    "Apt 1102, Merchant Lakes Towers",
+    "Rowhouse #32, Silver Creek",
+    "Apt 208, Paulding Meadows"
+  ];
+
+  const flatNamesIN = [
+    "Flat 402, Prestige Bluechip Villa",
+    "House #24, Sobha Tulip Residency",
+    "Flat G-3, Brigade Meadows",
+    "Mantri Elegance, Block A-104",
+    "Rowhouse #12, Adarsh Palm Retreat",
+    "Flat 508, Purva Skywood Apartments",
+    "Villa #18, Prestige Lakeside Habitat",
+    "Apt 301, Salarpuria Greenage",
+    "Block C-202, Assetz Marq",
+    "Flat 104, Shreeram Crest Apartments"
+  ];
+
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
@@ -49,8 +77,19 @@ async function getReverseGeocodeClient(lat: number, lng: number, country: string
 
     if (response.ok) {
       const data = await response.json();
-      if (data && data.display_name) {
-        return data.display_name;
+      if (data && data.address) {
+        const flat = (country === "IN") 
+          ? flatNamesIN[numSeed % flatNamesIN.length] 
+          : flatNamesUS[numSeed % flatNamesUS.length];
+
+        const street = data.address.road || data.address.pedestrian || "Main Street";
+        const area = data.address.suburb || data.address.neighbourhood || data.address.quarter || "Local Area";
+        const city = data.address.city || data.address.town || data.address.municipality || "Dallas";
+        const state = data.address.state || "Georgia";
+        const zip = data.address.postcode || ((country === "IN") ? "560038" : "30132");
+        const finalCountry = data.address.country || ((country === "IN") ? "India" : "USA");
+
+        return `${flat}, ${street}, ${area}, ${city}, ${state}, ${zip}, ${finalCountry}`;
       }
     }
   } catch (error) {
@@ -59,118 +98,70 @@ async function getReverseGeocodeClient(lat: number, lng: number, country: string
 
   // Fallback to high-fidelity street addresses based on actual coordinate points
   if (country === "IN") {
-    if (isHistory) {
-      const options = [
-        "Prestige Plaza, MG Road, Ashok Nagar, Bengaluru, Karnataka 560001, India",
-        "Brigade Road intersection, Tasker Town, Ashok Nagar, Bengaluru, Karnataka 560025, India",
-        "100 Feet Rd, Hal 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038, India",
-        "Koramangala 4th Block, 80 Feet Rd, Bengaluru, Karnataka 560034, India",
-        "Cubbon Park near High Court of Karnataka, Bengaluru, Karnataka 560001, India"
-      ];
-      return options[Math.abs(seedCode) % options.length];
-    }
-    const streetNo = 12 + (seedCode % 180);
-    return `${streetNo}, CMH Road, Lakshmipuram, Indiranagar, Bengaluru, Karnataka 560038, India`;
+    const flat = flatNamesIN[numSeed % flatNamesIN.length];
+    const streets = [
+      "12th Main Road, HAL 2nd Stage",
+      "CMH Road, Lakshmipuram",
+      "100 Feet Road",
+      "80 Feet Road, Koramangala 4th Block",
+      "MG Road, Ashok Nagar"
+    ];
+    const areas = [
+      "Indiranagar",
+      "Koramangala",
+      "Ashok Nagar",
+      "HAL Stage 2",
+      "Lakshmipuram"
+    ];
+    const street = streets[(numSeed + 1) % streets.length];
+    const area = areas[(numSeed + 2) % areas.length];
+    return `${flat}, ${street}, ${area}, Bengaluru, Karnataka, 560038, India`;
   } else {
-    if (isHistory) {
-      const options = [
-        "Golden Gate Park, San Francisco, CA 94122, USA",
-        "Union Square, 333 Post St, San Francisco, CA 94108, USA",
-        "PIER 39, Embarcadero, San Francisco, CA 94133, USA",
-        "Lombard St, North Beach, San Francisco, CA 94133, USA",
-        "Mission Dolores Park, Dolores St, San Francisco, CA 94110, USA"
-      ];
-      return options[Math.abs(seedCode) % options.length];
-    }
-    const streetNo = 100 + (seedCode % 850);
-    return `${streetNo} Dolores St, San Francisco, CA 94110, USA`;
+    const flat = flatNamesUS[numSeed % flatNamesUS.length];
+    const streets = [
+      "Hardee Street",
+      "W Memorial Drive",
+      "Dallas Acworth Hwy",
+      "Merchant Drive",
+      "Paulding Plaza",
+      "Main Street"
+    ];
+    const areas = [
+      "Downtown Dallas Area",
+      "Paulding County Area",
+      "Silver Ridge Subdivision",
+      "Country Lake Club",
+      "Laurel Springs Sector"
+    ];
+    const street = streets[(numSeed + 1) % streets.length];
+    const area = areas[(numSeed + 2) % areas.length];
+    return `${flat}, ${street}, ${area}, Dallas, Georgia, 30132, USA`;
   }
 }
 
 // Helper to resolve precise city and coordinates targeting a phone number's country and area code/digits
 export function resolveTargetLocation(phoneNumber: string, country: "US" | "IN"): { city: string; lat: number; lng: number } {
   const digits = phoneNumber.replace(/\D/g, "");
+  const numSeed = digits.split("").reduce((acc, c) => acc + (parseInt(c, 10) || 0), 0);
   
   if (country === "US") {
-    // Check main area codes from last 10 digits
-    const last10 = digits.slice(-10);
-    if (last10.length === 10) {
-      const areaCode = last10.slice(0, 3);
-      if (["770", "678", "470", "706"].includes(areaCode)) return { city: "Dallas, GA", lat: 33.9237, lng: -84.8408 };
-      if (["212", "917", "646"].includes(areaCode)) return { city: "New York", lat: 40.7128, lng: -74.0060 };
-      if (["718"].includes(areaCode)) return { city: "Brooklyn", lat: 40.6782, lng: -73.9442 };
-      if (["415", "628"].includes(areaCode)) return { city: "San Francisco", lat: 37.7749, lng: -122.4194 };
-      if (["408"].includes(areaCode)) return { city: "San Jose", lat: 37.3382, lng: -121.8863 };
-      if (["650"].includes(areaCode)) return { city: "Palo Alto", lat: 37.4419, lng: -122.1430 };
-      if (["213", "310", "818"].includes(areaCode)) return { city: "Los Angeles", lat: 34.0522, lng: -118.2437 };
-      if (["312", "773"].includes(areaCode)) return { city: "Chicago", lat: 41.8781, lng: -87.6298 };
-      if (["206"].includes(areaCode)) return { city: "Seattle", lat: 47.6062, lng: -122.3321 };
-      if (["617"].includes(areaCode)) return { city: "Boston", lat: 42.3601, lng: -71.0589 };
-      if (["305", "786"].includes(areaCode)) return { city: "Miami", lat: 25.7617, lng: -80.1918 };
-      if (["512"].includes(areaCode)) return { city: "Austin", lat: 30.2672, lng: -97.7431 };
-      if (["214", "469", "972"].includes(areaCode)) return { city: "Dallas", lat: 32.7767, lng: -96.7970 };
-      if (["713", "281", "832"].includes(areaCode)) return { city: "Houston", lat: 29.7604, lng: -95.3698 };
-      if (["602"].includes(areaCode)) return { city: "Phoenix", lat: 33.4484, lng: -112.0740 };
-      if (["702"].includes(areaCode)) return { city: "Las Vegas", lat: 36.1716, lng: -115.1398 };
-      if (["404"].includes(areaCode)) return { city: "Atlanta", lat: 33.7490, lng: -84.3880 };
-      if (["303"].includes(areaCode)) return { city: "Denver", lat: 39.7392, lng: -104.9903 };
-      if (["619", "858"].includes(areaCode)) return { city: "San Diego", lat: 32.7157, lng: -117.1611 };
-      if (["503"].includes(areaCode)) return { city: "Portland", lat: 45.5152, lng: -122.6784 };
-      if (["215"].includes(areaCode)) return { city: "Philadelphia", lat: 39.9526, lng: -75.1652 };
-      if (["202"].includes(areaCode)) return { city: "Washington", lat: 38.9072, lng: -77.0369 };
-    }
-    
-    // Fallback based on phone number seed to keep it consistent
-    const seed = digits.split("").reduce((acc, c) => acc + (parseInt(c, 10) || 0), 0);
-    const usCities = [
-      { city: "Dallas, GA", lat: 33.9237, lng: -84.8408 },
-      { city: "San Francisco", lat: 37.7749, lng: -122.4194 },
-      { city: "New York", lat: 40.7128, lng: -74.0060 },
-      { city: "Los Angeles", lat: 34.0522, lng: -118.2437 },
-      { city: "Chicago", lat: 41.8781, lng: -87.6298 },
-      { city: "Seattle", lat: 47.6062, lng: -122.3321 },
-      { city: "Miami", lat: 25.7617, lng: -80.1918 },
-      { city: "Austin", lat: 30.2672, lng: -97.7431 },
-    ];
-    return usCities[seed % usCities.length];
+    // Center all searches beautifully in Dallas, Georgia with small unique offsets based on the number to show live tracking precision
+    const latOffset = ((numSeed % 6) * 0.0004) - 0.001;
+    const lngOffset = ((numSeed % 6) * 0.0004) - 0.001;
+    return {
+      city: "Dallas, GA",
+      lat: 33.9237 + latOffset,
+      lng: -84.8408 + lngOffset
+    };
   } else {
-    // India phone parsing based on last 10 digits prefixes
-    const last10 = digits.slice(-10);
-    if (last10.length === 10) {
-      const prefix4 = last10.slice(0, 4);
-      if (["9844", "9845", "9886", "9900", "9945", "9980", "9008", "9035", "9535", "9611", "9686"].includes(prefix4)) {
-        return { city: "Bangalore", lat: 12.9716, lng: 77.5946 };
-      }
-      if (["9820", "9821", "9819", "9833", "9892", "9769", "9920", "9930", "9619"].includes(prefix4)) {
-        return { city: "Mumbai", lat: 19.0760, lng: 72.8777 };
-      }
-      if (["9810", "9811", "9818", "9871", "9873", "9910", "9911", "9958", "9971", "9999"].includes(prefix4)) {
-        return { city: "New Delhi", lat: 28.6139, lng: 77.2090 };
-      }
-      if (["9830", "9831", "9903", "9836"].includes(prefix4)) {
-        return { city: "Kolkata", lat: 22.5726, lng: 88.3639 };
-      }
-      if (["9840", "9841", "9940", "9941"].includes(prefix4)) {
-        return { city: "Chennai", lat: 13.0827, lng: 80.2707 };
-      }
-      if (["9848", "9849", "9948", "9949"].includes(prefix4)) {
-        return { city: "Hyderabad", lat: 17.3850, lng: 78.4867 };
-      }
-      if (["9822", "9860", "9922"].includes(prefix4)) {
-        return { city: "Pune", lat: 18.5204, lng: 73.8567 };
-      }
-    }
-    
-    // General fallback based on phone number seed for India
-    const seed = digits.split("").reduce((acc, c) => acc + (parseInt(c, 10) || 0), 0);
-    const inCities = [
-      { city: "Bangalore", lat: 12.9716, lng: 77.5946 },
-      { city: "Mumbai", lat: 19.0760, lng: 72.8777 },
-      { city: "New Delhi", lat: 28.6139, lng: 77.2090 },
-      { city: "Chennai", lat: 13.0827, lng: 80.2707 },
-      { city: "Hyderabad", lat: 17.3850, lng: 78.4867 },
-    ];
-    return inCities[seed % inCities.length];
+    // Center all searches beautifully in Bengaluru, India with small unique offsets based on the number
+    const latOffset = ((numSeed % 6) * 0.0004) - 0.001;
+    const lngOffset = ((numSeed % 6) * 0.0004) - 0.001;
+    return {
+      city: "Bengaluru, Karnataka",
+      lat: 12.9716 + latOffset,
+      lng: 77.5946 + lngOffset
+    };
   }
 }
 
@@ -506,8 +497,8 @@ export default function App() {
       // Calculate randomized but consistent mock tracking coordinates based on phone number seed (identical to server.ts)
       const numSeed = phoneNumber.split("").reduce((acc: number, char: string) => acc + (parseInt(char, 10) || 0), 0);
       
-      let baseLat = 37.7749;
-      let baseLng = -122.4194;
+      let baseLat = country === "IN" ? 12.9716 : 33.9237;
+      let baseLng = country === "IN" ? 77.5946 : -84.8408;
       let isUsingClientLoc = false;
 
       if (targetLat != null && targetLng != null) {

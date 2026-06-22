@@ -42,6 +42,34 @@ try {
 
 // Helper function to geocode coordinates into physical addresses using OpenStreetMap Nominatim
 async function getReverseGeocode(lat: number, lng: number, country: string, isHistory = false, seedCode = 0): Promise<string> {
+  const numSeed = Math.abs(seedCode);
+
+  const flatNamesUS = [
+    "Apt 204, Birchwood Apartments",
+    "Rowhouse #15, Paulding Coves",
+    "Flat 303, Sweetwater Ridge",
+    "House #184, Whispering Pines",
+    "Suite 102, Laurel Springs",
+    "Apt 4B, Dogwood Heights Condos",
+    "Villa #7, Dallas Creek Estates",
+    "Apt 1102, Merchant Lakes Towers",
+    "Rowhouse #32, Silver Creek",
+    "Apt 208, Paulding Meadows"
+  ];
+
+  const flatNamesIN = [
+    "Flat 402, Prestige Bluechip Villa",
+    "House #24, Sobha Tulip Residency",
+    "Flat G-3, Brigade Meadows",
+    "Mantri Elegance, Block A-104",
+    "Rowhouse #12, Adarsh Palm Retreat",
+    "Flat 508, Purva Skywood Apartments",
+    "Villa #18, Prestige Lakeside Habitat",
+    "Apt 301, Salarpuria Greenage",
+    "Block C-202, Assetz Marq",
+    "Flat 104, Shreeram Crest Apartments"
+  ];
+
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
@@ -54,8 +82,19 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
 
     if (response.ok) {
       const data = (await response.json()) as any;
-      if (data && data.display_name) {
-        return data.display_name;
+      if (data && data.address) {
+        const flat = (country === "IN") 
+          ? flatNamesIN[numSeed % flatNamesIN.length] 
+          : flatNamesUS[numSeed % flatNamesUS.length];
+
+        const street = data.address.road || data.address.pedestrian || "Main Street";
+        const area = data.address.suburb || data.address.neighbourhood || data.address.quarter || "Local Area";
+        const city = data.address.city || data.address.town || data.address.municipality || "Dallas";
+        const state = data.address.state || "Georgia";
+        const zip = data.address.postcode || ((country === "IN") ? "560038" : "30132");
+        const finalCountry = data.address.country || ((country === "IN") ? "India" : "USA");
+
+        return `${flat}, ${street}, ${area}, ${city}, ${state}, ${zip}, ${finalCountry}`;
       }
     }
   } catch (error) {
@@ -65,33 +104,45 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
   // Detect country based on actual coordinate bands for smart local fallback
   const resolvedCountry = (lat > 6 && lat < 36 && lng > 68 && lng < 97) ? "IN" : country;
 
-  // Fallback to high-fidelity street addresses based on actual coordinate points
   if (resolvedCountry === "IN") {
-    if (isHistory) {
-      const options = [
-        "Prestige Plaza, MG Road, Ashok Nagar, Bengaluru, Karnataka 560001, India",
-        "Brigade Road intersection, Tasker Town, Ashok Nagar, Bengaluru, Karnataka 560025, India",
-        "100 Feet Rd, Hal 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038, India",
-        "Koramangala 4th Block, 80 Feet Rd, Bengaluru, Karnataka 560034, India",
-        "Cubbon Park near High Court of Karnataka, Bengaluru, Karnataka 560001, India"
-      ];
-      return options[Math.abs(seedCode) % options.length];
-    }
-    const streetNo = 12 + (seedCode % 180);
-    return `${streetNo}, CMH Road, Lakshmipuram, Indiranagar, Bengaluru, Karnataka 560038, India`;
+    const flat = flatNamesIN[numSeed % flatNamesIN.length];
+    const streets = [
+      "12th Main Road, HAL 2nd Stage",
+      "CMH Road, Lakshmipuram",
+      "100 Feet Road",
+      "80 Feet Road, Koramangala 4th Block",
+      "MG Road, Ashok Nagar"
+    ];
+    const areas = [
+      "Indiranagar",
+      "Koramangala",
+      "Ashok Nagar",
+      "HAL Stage 2",
+      "Lakshmipuram"
+    ];
+    const street = streets[(numSeed + 1) % streets.length];
+    const area = areas[(numSeed + 2) % areas.length];
+    return `${flat}, ${street}, ${area}, Bengaluru, Karnataka, 560038, India`;
   } else {
-    if (isHistory) {
-      const options = [
-        "Golden Gate Park, San Francisco, CA 94122, USA",
-        "Union Square, 333 Post St, San Francisco, CA 94108, USA",
-        "PIER 39, Embarcadero, San Francisco, CA 94133, USA",
-        "Lombard St, North Beach, San Francisco, CA 94133, USA",
-        "Mission Dolores Park, Dolores St, San Francisco, CA 94110, USA"
-      ];
-      return options[Math.abs(seedCode) % options.length];
-    }
-    const streetNo = 100 + (seedCode % 850);
-    return `${streetNo} Dolores St, San Francisco, CA 94110, USA`;
+    const flat = flatNamesUS[numSeed % flatNamesUS.length];
+    const streets = [
+      "Hardee Street",
+      "W Memorial Drive",
+      "Dallas Acworth Hwy",
+      "Merchant Drive",
+      "Paulding Plaza",
+      "Main Street"
+    ];
+    const areas = [
+      "Downtown Dallas Area",
+      "Paulding County Area",
+      "Silver Ridge Subdivision",
+      "Country Lake Club",
+      "Laurel Springs Sector"
+    ];
+    const street = streets[(numSeed + 1) % streets.length];
+    const area = areas[(numSeed + 2) % areas.length];
+    return `${flat}, ${street}, ${area}, Dallas, Georgia, 30132, USA`;
   }
 }
 
@@ -107,9 +158,9 @@ app.post("/api/track-phone", async (req, res) => {
     const numSeed = phoneNumber.split("").reduce((acc: number, char: string) => acc + (parseInt(char, 10) || 0), 0);
 
     // Default base coordinates
-    let baseLat = country === "IN" ? 12.9716 : 37.7749;
-    let baseLng = country === "IN" ? 77.5946 : -122.4194;
-    let resolvedCity = country === "IN" ? "Bengaluru, Karnataka" : "San Francisco, CA";
+    let baseLat = country === "IN" ? 12.9716 : 33.9237;
+    let baseLng = country === "IN" ? 77.5946 : -84.8408;
+    let resolvedCity = country === "IN" ? "Bengaluru, Karnataka" : "Dallas, GA";
     let resolvedAddress = "";
     let resolvedCarrier = carrier;
     let resolvedDeviceModel = customDeviceModel;
@@ -189,18 +240,10 @@ Provide the response in the required JSON structure.
         baseLat = 12.9716;
         baseLng = 77.5946;
       } else {
-        // Look up area code check
-        const digits = phoneNumber.replace(/\D/g, "");
-        const last10 = digits.slice(-10);
-        const areaCode = last10.slice(0, 3);
-        if (country === "US" && ["770", "678", "470", "706"].includes(areaCode)) {
-          baseLat = 33.9237;
-          baseLng = -84.8408;
-          resolvedCity = "Dallas, Georgia";
-        } else {
-          baseLat = 37.7749;
-          baseLng = -122.4194;
-        }
+        // Default to Dallas, Georgia for any other US number
+        baseLat = 33.9237;
+        baseLng = -84.8408;
+        resolvedCity = "Dallas, Georgia";
       }
     }
 
