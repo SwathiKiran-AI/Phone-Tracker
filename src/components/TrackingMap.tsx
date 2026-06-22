@@ -139,6 +139,13 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
 
     const targetZoom = calcLeafletZoom(zoom);
     map.setView([location.latitude, location.longitude], targetZoom);
+    
+    // Explicitly invalidate sizing to force Leaflet to recalculate container borders and load correct imagery
+    setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 100);
 
     if (markerRef.current) {
       markerRef.current.setLatLng([location.latitude, location.longitude]);

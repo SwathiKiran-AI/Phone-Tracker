@@ -87,24 +87,23 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
     if (response.ok) {
       const data = (await response.json()) as any;
       if (data && data.address) {
-        if (zone === "IN") {
-          const flat = flatNamesIN[numSeed % flatNamesIN.length];
-          const street = data.address.road || data.address.pedestrian || "12th Main Road, HAL 2nd Stage";
-          const area = data.address.suburb || data.address.neighbourhood || data.address.quarter || "Indiranagar";
-          const city = data.address.city || data.address.town || data.address.municipality || "Bengaluru";
-          const state = data.address.state || "Karnataka";
-          let pinCode = data.address.postcode || "560038";
-          if (!/^\d{6}$/.test(pinCode)) pinCode = "560038";
-          return `${flat}, ${street}, ${area}, ${city}, ${state}, ${pinCode}, India`;
-        } else {
-          const flat = flatNamesUS[numSeed % flatNamesUS.length];
-          const street = data.address.road || data.address.pedestrian || "Main Street";
-          const area = data.address.suburb || data.address.neighbourhood || "Downtown Dallas Area";
-          const city = data.address.city || data.address.town || "Dallas";
-          const state = data.address.state || "Georgia";
-          let pinCode = data.address.postcode || "30132";
-          if (!/^\d{5}$/.test(pinCode)) pinCode = "30132";
-          return `${flat}, ${street}, ${area}, ${city}, ${state}, ${pinCode}, USA`;
+        const flat = zone === "IN" 
+          ? flatNamesIN[numSeed % flatNamesIN.length] 
+          : flatNamesUS[numSeed % flatNamesUS.length];
+        
+        const street = data.address.road || data.address.pedestrian || data.address.cycleway || data.address.path || "";
+        const hamlet = data.address.suburb || data.address.neighbourhood || data.address.quarter || data.address.village || "";
+        const city = data.address.city || data.address.town || data.address.municipality || data.address.county || "";
+        const state = data.address.state || "";
+        const postcode = data.address.postcode || "";
+        const countryName = data.address.country || (zone === "IN" ? "India" : "USA");
+
+        const parts = [flat, street, hamlet, city, state, postcode, countryName]
+          .map(p => p ? p.toString().trim() : "")
+          .filter(Boolean);
+        
+        if (parts.length > 2) {
+          return parts.join(", ");
         }
       }
     }

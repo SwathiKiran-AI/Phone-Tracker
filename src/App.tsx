@@ -82,24 +82,23 @@ async function getReverseGeocodeClient(lat: number, lng: number, country: string
     if (response.ok) {
       const data = await response.json();
       if (data && data.address) {
-        if (zone === "IN") {
-          const flat = flatNamesIN[numSeed % flatNamesIN.length];
-          const street = data.address.road || data.address.pedestrian || "12th Main Road, HAL 2nd Stage";
-          const area = data.address.suburb || data.address.neighbourhood || data.address.quarter || "Indiranagar";
-          const city = data.address.city || data.address.town || data.address.municipality || "Bengaluru";
-          const state = data.address.state || "Karnataka";
-          let pinCode = data.address.postcode || "560038";
-          if (!/^\d{6}$/.test(pinCode)) pinCode = "560038";
-          return `${flat}, ${street}, ${area}, ${city}, ${state}, ${pinCode}, India`;
-        } else {
-          const flat = flatNamesUS[numSeed % flatNamesUS.length];
-          const street = data.address.road || data.address.pedestrian || "Main Street";
-          const area = data.address.suburb || data.address.neighbourhood || "Downtown Dallas Area";
-          const city = data.address.city || data.address.town || "Dallas";
-          const state = data.address.state || "Georgia";
-          let pinCode = data.address.postcode || "30132";
-          if (!/^\d{5}$/.test(pinCode)) pinCode = "30132";
-          return `${flat}, ${street}, ${area}, ${city}, ${state}, ${pinCode}, USA`;
+        const flat = zone === "IN" 
+          ? flatNamesIN[numSeed % flatNamesIN.length] 
+          : flatNamesUS[numSeed % flatNamesUS.length];
+        
+        const street = data.address.road || data.address.pedestrian || data.address.cycleway || data.address.path || "";
+        const hamlet = data.address.suburb || data.address.neighbourhood || data.address.quarter || data.address.village || "";
+        const city = data.address.city || data.address.town || data.address.municipality || data.address.county || "";
+        const state = data.address.state || "";
+        const postcode = data.address.postcode || "";
+        const countryName = data.address.country || (zone === "IN" ? "India" : "USA");
+
+        const parts = [flat, street, hamlet, city, state, postcode, countryName]
+          .map(p => p ? p.toString().trim() : "")
+          .filter(Boolean);
+        
+        if (parts.length > 2) {
+          return parts.join(", ");
         }
       }
     }
@@ -388,14 +387,16 @@ export default function App() {
         const pos = await coordsPromise;
         const glat = pos.coords.latitude;
         const glng = pos.coords.longitude;
-        // Verify resolved position matches the target country's rough hemisphere/regions to prevent cross-border confusion
         const isIndiaCoords = (glat > 6 && glat < 36 && glng > 68 && glng < 97);
-        if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
-          targetLat = glat;
-          targetLng = glng;
-          resolvedCity = "Browser GPS locked";
-          console.log("GSM Simulator: Browser live physical GPS locked successfully:", targetLat, targetLng);
+        if (isIndiaCoords) {
+          setCountry("IN");
+        } else {
+          setCountry("US");
         }
+        targetLat = glat;
+        targetLng = glng;
+        resolvedCity = "Browser GPS locked";
+        console.log("GSM Simulator: Browser live physical GPS locked successfully:", targetLat, targetLng);
       }
     } catch (geowarn) {
       console.warn("GSM Simulator: Browser GPS unavailable or denied, shifting to IP Geolocation database lookup:", geowarn);
@@ -411,12 +412,15 @@ export default function App() {
             const ilat = Number(ipData.latitude);
             const ilng = Number(ipData.longitude);
             const isIndiaCoords = (ilat > 6 && ilat < 36 && ilng > 68 && ilng < 97);
-            if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
-              targetLat = ilat;
-              targetLng = ilng;
-              resolvedCity = ipData.city || "Network Node Area";
-              console.log("GSM Simulator: IP Geolocation resolved regional coordinates:", targetLat, targetLng);
+            if (isIndiaCoords) {
+              setCountry("IN");
+            } else {
+              setCountry("US");
             }
+            targetLat = ilat;
+            targetLng = ilng;
+            resolvedCity = ipData.city || "Network Node Area";
+            console.log("GSM Simulator: IP Geolocation resolved regional coordinates:", targetLat, targetLng);
           }
         }
       } catch (ipErr) {
@@ -429,12 +433,15 @@ export default function App() {
               const ilat = Number(backupData.latitude);
               const ilng = Number(backupData.longitude);
               const isIndiaCoords = (ilat > 6 && ilat < 36 && ilng > 68 && ilng < 97);
-              if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
-                targetLat = ilat;
-                targetLng = ilng;
-                resolvedCity = backupData.cityName || "Network Node Area Backup";
-                console.log("GSM Simulator: Backup IP Geolocation resolved coordinates:", targetLat, targetLng);
+              if (isIndiaCoords) {
+                setCountry("IN");
+              } else {
+                setCountry("US");
               }
+              targetLat = ilat;
+              targetLng = ilng;
+              resolvedCity = backupData.cityName || "Network Node Area Backup";
+              console.log("GSM Simulator: Backup IP Geolocation resolved coordinates:", targetLat, targetLng);
             }
           }
         } catch (backupErr) {
