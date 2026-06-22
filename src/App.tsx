@@ -65,6 +65,10 @@ async function getReverseGeocodeClient(lat: number, lng: number, country: string
     "Flat 104, Shreeram Crest Apartments"
   ];
 
+  // Decide target country zone purely by coordinate bounding box to prevent any mixed state/country configurations
+  const isIndiaZone = (lat > 6 && lat < 36 && lng > 68 && lng < 97);
+  const zone = isIndiaZone ? "IN" : "US";
+
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
@@ -78,26 +82,33 @@ async function getReverseGeocodeClient(lat: number, lng: number, country: string
     if (response.ok) {
       const data = await response.json();
       if (data && data.address) {
-        const flat = (country === "IN") 
-          ? flatNamesIN[numSeed % flatNamesIN.length] 
-          : flatNamesUS[numSeed % flatNamesUS.length];
-
-        const street = data.address.road || data.address.pedestrian || "Main Street";
-        const area = data.address.suburb || data.address.neighbourhood || data.address.quarter || "Local Area";
-        const city = data.address.city || data.address.town || data.address.municipality || "Dallas";
-        const state = data.address.state || "Georgia";
-        const zip = data.address.postcode || ((country === "IN") ? "560038" : "30132");
-        const finalCountry = data.address.country || ((country === "IN") ? "India" : "USA");
-
-        return `${flat}, ${street}, ${area}, ${city}, ${state}, ${zip}, ${finalCountry}`;
+        if (zone === "IN") {
+          const flat = flatNamesIN[numSeed % flatNamesIN.length];
+          const street = data.address.road || data.address.pedestrian || "12th Main Road, HAL 2nd Stage";
+          const area = data.address.suburb || data.address.neighbourhood || data.address.quarter || "Indiranagar";
+          const city = data.address.city || data.address.town || data.address.municipality || "Bengaluru";
+          const state = data.address.state || "Karnataka";
+          let pinCode = data.address.postcode || "560038";
+          if (!/^\d{6}$/.test(pinCode)) pinCode = "560038";
+          return `${flat}, ${street}, ${area}, ${city}, ${state}, ${pinCode}, India`;
+        } else {
+          const flat = flatNamesUS[numSeed % flatNamesUS.length];
+          const street = data.address.road || data.address.pedestrian || "Main Street";
+          const area = data.address.suburb || data.address.neighbourhood || "Downtown Dallas Area";
+          const city = data.address.city || data.address.town || "Dallas";
+          const state = data.address.state || "Georgia";
+          let pinCode = data.address.postcode || "30132";
+          if (!/^\d{5}$/.test(pinCode)) pinCode = "30132";
+          return `${flat}, ${street}, ${area}, ${city}, ${state}, ${pinCode}, USA`;
+        }
       }
     }
   } catch (error) {
     console.warn("Client Nominatim geocode unsuccessful, falling back to local database mapping.");
   }
 
-  // Fallback to high-fidelity street addresses based on actual coordinate points
-  if (country === "IN") {
+  // Fallback to high-fidelity street addresses based on zone
+  if (zone === "IN") {
     const flat = flatNamesIN[numSeed % flatNamesIN.length];
     const streets = [
       "12th Main Road, HAL 2nd Stage",
@@ -541,21 +552,51 @@ export default function App() {
         mockHist2 = await getReverseGeocodeClient(finalLat - 0.0024, finalLng + 0.0022, clientCountry, true, numSeed + 2);
         mockHist3 = await getReverseGeocodeClient(finalLat + 0.0005, finalLng + 0.0003, clientCountry, true, numSeed + 3);
       } catch (geocodeErr) {
-        if (isUsingClientLoc) {
-          mockAddress = "In immediate workspace vicinity / nearby coordinate cell (Centimeter-Accurate Local Lock)";
-          mockHist1 = "Local node sector A - 5 mins ago";
-          mockHist2 = "Local node sector B - 15 mins ago";
-          mockHist3 = "Owner location baseline - 45 mins ago";
-        } else if (country === "IN") {
-          mockAddress = `${12 + (numSeed % 180)}, CMH Road, Lakshmipuram, Indiranagar, Bengaluru, Karnataka 560038, India`;
-          mockHist1 = "Prestige Plaza, MG Road, Ashok Nagar, Bengaluru, Karnataka 560001, India";
-          mockHist2 = "Brigade Road intersection, Tasker Town, Ashok Nagar, Bengaluru, Karnataka 560025, India";
-          mockHist3 = "100 Feet Rd, Hal 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038, India";
+        const flatNamesUS = [
+          "Apt 204, Birchwood Apartments",
+          "Rowhouse #15, Paulding Coves",
+          "Flat 303, Sweetwater Ridge",
+          "House #184, Whispering Pines",
+          "Suite 102, Laurel Springs",
+          "Apt 4B, Dogwood Heights Condos",
+          "Villa #7, Dallas Creek Estates",
+          "Apt 1102, Merchant Lakes Towers",
+          "Rowhouse #32, Silver Creek",
+          "Apt 208, Paulding Meadows"
+        ];
+
+        const flatNamesIN = [
+          "Flat 402, Prestige Bluechip Villa",
+          "House #24, Sobha Tulip Residency",
+          "Flat G-3, Brigade Meadows",
+          "Mantri Elegance, Block A-104",
+          "Rowhouse #12, Adarsh Palm Retreat",
+          "Flat 508, Purva Skywood Apartments",
+          "Villa #18, Prestige Lakeside Habitat",
+          "Apt 301, Salarpuria Greenage",
+          "Block C-202, Assetz Marq",
+          "Flat 104, Shreeram Crest Apartments"
+        ];
+
+        const fallbackZone = (finalLat > 6 && finalLat < 36 && finalLng > 68 && finalLng < 97) ? "IN" : "US";
+        if (fallbackZone === "IN") {
+          const flat = flatNamesIN[numSeed % flatNamesIN.length];
+          const streets = ["12th Main Road, HAL 2nd Stage", "CMH Road, Lakshmipuram", "100 Feet Road", "80 Feet Road, Koramangala 4th Block", "MG Road, Ashok Nagar"];
+          const areas = ["Indiranagar", "Koramangala", "Ashok Nagar", "HAL Stage 2", "Lakshmipuram"];
+          
+          mockAddress = `${flat}, ${streets[numSeed % streets.length]}, ${areas[(numSeed + 1) % areas.length]}, Bengaluru, Karnataka, 560038, India`;
+          mockHist1 = `${flatNamesIN[(numSeed + 1) % flatNamesIN.length]}, ${streets[(numSeed + 1) % streets.length]}, ${areas[(numSeed + 2) % areas.length]}, Bengaluru, Karnataka, 560038, India`;
+          mockHist2 = `${flatNamesIN[(numSeed + 2) % flatNamesIN.length]}, ${streets[(numSeed + 2) % streets.length]}, ${areas[(numSeed + 3) % areas.length]}, Bengaluru, Karnataka, 560038, India`;
+          mockHist3 = `${flatNamesIN[(numSeed + 3) % flatNamesIN.length]}, ${streets[(numSeed + 3) % streets.length]}, ${areas[(numSeed + 4) % areas.length]}, Bengaluru, Karnataka, 560038, India`;
         } else {
-          mockAddress = `${100 + (numSeed % 850)} Dolores St, San Francisco, CA 94110, USA`;
-          mockHist1 = "Golden Gate Park, San Francisco, CA 94122, USA";
-          mockHist2 = "Union Square, 333 Post St, San Francisco, CA 94108, USA";
-          mockHist3 = "PIER 39, Embarcadero, San Francisco, CA 94133, USA";
+          const flat = flatNamesUS[numSeed % flatNamesUS.length];
+          const streets = ["Hardee Street", "W Memorial Drive", "Dallas Acworth Hwy", "Merchant Drive", "Paulding Plaza", "Main Street"];
+          const areas = ["Downtown Dallas Area", "Paulding County Area", "Silver Ridge Subdivision", "Country Lake Club", "Laurel Springs Sector"];
+          
+          mockAddress = `${flat}, ${streets[numSeed % streets.length]}, ${areas[(numSeed + 1) % areas.length]}, Dallas, Georgia, 30132, USA`;
+          mockHist1 = `${flatNamesUS[(numSeed + 1) % flatNamesUS.length]}, ${streets[(numSeed + 1) % streets.length]}, ${areas[(numSeed + 2) % areas.length]}, Dallas, Georgia, 30132, USA`;
+          mockHist2 = `${flatNamesUS[(numSeed + 2) % flatNamesUS.length]}, ${streets[(numSeed + 2) % streets.length]}, ${areas[(numSeed + 3) % areas.length]}, Dallas, Georgia, 30132, USA`;
+          mockHist3 = `${flatNamesUS[(numSeed + 3) % flatNamesUS.length]}, ${streets[(numSeed + 3) % streets.length]}, ${areas[(numSeed + 4) % areas.length]}, Dallas, Georgia, 30132, USA`;
         }
       }
 

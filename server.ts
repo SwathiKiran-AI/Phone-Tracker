@@ -70,6 +70,10 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
     "Flat 104, Shreeram Crest Apartments"
   ];
 
+  // Decide target country zone purely by coordinate bounding box to prevent any mixed state/country configurations
+  const isIndiaZone = (lat > 6 && lat < 36 && lng > 68 && lng < 97);
+  const zone = isIndiaZone ? "IN" : "US";
+
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
@@ -83,28 +87,33 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
     if (response.ok) {
       const data = (await response.json()) as any;
       if (data && data.address) {
-        const flat = (country === "IN") 
-          ? flatNamesIN[numSeed % flatNamesIN.length] 
-          : flatNamesUS[numSeed % flatNamesUS.length];
-
-        const street = data.address.road || data.address.pedestrian || "Main Street";
-        const area = data.address.suburb || data.address.neighbourhood || data.address.quarter || "Local Area";
-        const city = data.address.city || data.address.town || data.address.municipality || "Dallas";
-        const state = data.address.state || "Georgia";
-        const zip = data.address.postcode || ((country === "IN") ? "560038" : "30132");
-        const finalCountry = data.address.country || ((country === "IN") ? "India" : "USA");
-
-        return `${flat}, ${street}, ${area}, ${city}, ${state}, ${zip}, ${finalCountry}`;
+        if (zone === "IN") {
+          const flat = flatNamesIN[numSeed % flatNamesIN.length];
+          const street = data.address.road || data.address.pedestrian || "12th Main Road, HAL 2nd Stage";
+          const area = data.address.suburb || data.address.neighbourhood || data.address.quarter || "Indiranagar";
+          const city = data.address.city || data.address.town || data.address.municipality || "Bengaluru";
+          const state = data.address.state || "Karnataka";
+          let pinCode = data.address.postcode || "560038";
+          if (!/^\d{6}$/.test(pinCode)) pinCode = "560038";
+          return `${flat}, ${street}, ${area}, ${city}, ${state}, ${pinCode}, India`;
+        } else {
+          const flat = flatNamesUS[numSeed % flatNamesUS.length];
+          const street = data.address.road || data.address.pedestrian || "Main Street";
+          const area = data.address.suburb || data.address.neighbourhood || "Downtown Dallas Area";
+          const city = data.address.city || data.address.town || "Dallas";
+          const state = data.address.state || "Georgia";
+          let pinCode = data.address.postcode || "30132";
+          if (!/^\d{5}$/.test(pinCode)) pinCode = "30132";
+          return `${flat}, ${street}, ${area}, ${city}, ${state}, ${pinCode}, USA`;
+        }
       }
     }
   } catch (error) {
     console.warn("Nominatim reverse geocode fetch unsuccessful, falling back to realistic local map database.");
   }
 
-  // Detect country based on actual coordinate bands for smart local fallback
-  const resolvedCountry = (lat > 6 && lat < 36 && lng > 68 && lng < 97) ? "IN" : country;
-
-  if (resolvedCountry === "IN") {
+  // Fallback to high-fidelity street addresses based on zone
+  if (zone === "IN") {
     const flat = flatNamesIN[numSeed % flatNamesIN.length];
     const streets = [
       "12th Main Road, HAL 2nd Stage",
@@ -233,9 +242,24 @@ Provide the response in the required JSON structure.
         baseLng = Number(targetLng);
         isUsingClientLoc = true;
       } else if (clientLat != null && clientLng != null && !isNaN(Number(clientLat)) && !isNaN(Number(clientLng))) {
-        baseLat = Number(clientLat);
-        baseLng = Number(clientLng);
-        isUsingClientLoc = true;
+        const cLat = Number(clientLat);
+        const cLng = Number(clientLng);
+        const isClientInIndia = (cLat > 6 && cLat < 36 && cLng > 68 && cLng < 97);
+        if ((country === "IN" && isClientInIndia) || (country === "US" && !isClientInIndia)) {
+          baseLat = cLat;
+          baseLng = cLng;
+          isUsingClientLoc = true;
+        } else {
+          // If the client coordinate is in the wrong country for the search, default to the right country coordinates
+          if (country === "IN") {
+            baseLat = 12.9716;
+            baseLng = 77.5946;
+          } else {
+            baseLat = 33.9237;
+            baseLng = -84.8408;
+            resolvedCity = "Dallas, Georgia";
+          }
+        }
       } else if (country === "IN") {
         baseLat = 12.9716;
         baseLng = 77.5946;
@@ -254,8 +278,8 @@ Provide the response in the required JSON structure.
     const finalLat = baseLat + ((numSeed % 5) * offsetFactor) + offsetSub;
     const finalLng = baseLng + ((numSeed % 5) * offsetFactor) + offsetSub;
 
-    // Use reverse geocoder to retrieve exact administrative OSM address for coordinates if address is not pre-populated by Gemini
-    const currentAddress = resolvedAddress || await getReverseGeocode(finalLat, finalLng, country, false, numSeed);
+    // Use reverse geocoder to retrieve exact administrative OSM address for coordinates (ignoring any potential Gemini mixed strings for absolute layout safety)
+    const currentAddress = await getReverseGeocode(finalLat, finalLng, country, false, numSeed);
     
     const hist1Address = await getReverseGeocode(finalLat + 0.0016, finalLng - 0.0014, country, true, numSeed + 1);
     const hist2Address = await getReverseGeocode(finalLat - 0.0024, finalLng + 0.0022, country, true, numSeed + 2);
