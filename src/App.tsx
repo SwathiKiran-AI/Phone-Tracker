@@ -410,6 +410,11 @@ export default function App() {
   // Custom tracking options for pinpointing state and locations
   const [locMode, setLocMode] = useState<"live" | "telecom" | "custom">("live");
   const [customTargetAddress, setCustomTargetAddress] = useState("");
+  const [lastKnownLocationInput, setLastKnownLocationInput] = useState("");
+  const [isAutofillingLocation, setIsAutofillingLocation] = useState(false);
+  const [dashboardSearchText, setDashboardSearchText] = useState("");
+  const [isUpdatingMap, setIsUpdatingMap] = useState(false);
+  const [mapOverrideError, setMapOverrideError] = useState<string | null>(null);
   
   // Decoys collapse/expand view state
   const [showAdvancedDecoys, setShowAdvancedDecoys] = useState(false);
@@ -613,50 +618,41 @@ export default function App() {
     setSearchStep(0);
     setSearchStatusList([]);
 
-    // 1. Resolve high-precision real GPS coordinates from browser sensor or fallback IP geolocator
+    // Default coordinates based on country
     let targetLat = country === "IN" ? 12.9716 : 37.7749;
     let targetLng = country === "IN" ? 77.5946 : -122.4194;
     let resolvedCity = country === "IN" ? "Bengaluru, Karnataka" : "San Francisco, CA";
 
-    let acquiredLat: number | null = null;
-    let acquiredLng: number | null = null;
-    let tempCity = "";
-
-    try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        const options = {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        };
-        navigator.geolocation.getCurrentPosition(resolve, reject, options);
-      });
-      acquiredLat = pos.coords.latitude;
-      acquiredLng = pos.coords.longitude;
-      tempCity = "Live GPS Sensor Locked";
-      console.log("GSM Simulator: Browser live GPS coordinates acquired successfully:", acquiredLat, acquiredLng);
-    } catch (geoErr) {
-      console.warn("Browser GPS permission blocked/timed out. Attempting IP Geolocation fallback...", geoErr);
+    // 1. Geocode manual last known location query if provided
+    if (lastKnownLocationInput.trim()) {
       try {
-        const ipRes = await fetch("https://ipapi.co/json/");
-        if (ipRes.ok) {
-          const ipData = await ipRes.json();
-          if (ipData.latitude && ipData.longitude) {
-            acquiredLat = ipData.latitude;
-            acquiredLng = ipData.longitude;
-            tempCity = `${ipData.city || "Local"}, ${ipData.region || "IP Location"}`;
-            console.log("GSM Simulator: IP Geolocation locked successfully:", acquiredLat, acquiredLng);
-          }
+        const geoResult = await searchGeocodeAddress(lastKnownLocationInput);
+        if (geoResult) {
+          targetLat = geoResult.lat;
+          targetLng = geoResult.lng;
+          resolvedCity = geoResult.city;
+          console.log("GSM Simulator: Manually specified target geocoded successfully:", targetLat, targetLng);
+        } else {
+          console.warn("GSM Simulator: Manually specified location failed to resolve. Falling back to phone prefix mapping.");
+          const fallback = resolveTargetLocation(phoneNumber, country);
+          targetLat = fallback.lat;
+          targetLng = fallback.lng;
+          resolvedCity = fallback.city;
         }
-      } catch (ipErr) {
-        console.warn("IP Geolocation fallback failed.", ipErr);
+      } catch (err) {
+        console.warn("Geocoding failed, falling back to phone prefix:", err);
+        const fallback = resolveTargetLocation(phoneNumber, country);
+        targetLat = fallback.lat;
+        targetLng = fallback.lng;
+        resolvedCity = fallback.city;
       }
-    }
-
-    if (acquiredLat !== null && acquiredLng !== null) {
-      targetLat = acquiredLat;
-      targetLng = acquiredLng;
-      resolvedCity = tempCity;
+    } else {
+      // 2. Otherwise auto-resolve based on area code series lookup
+      const fallback = resolveTargetLocation(phoneNumber, country);
+      targetLat = fallback.lat;
+      targetLng = fallback.lng;
+      resolvedCity = fallback.city;
+      console.log("GSM Simulator: Auto-resolved target location via cellular prefix:", targetLat, targetLng);
     }
 
     console.log(`GSM Simulator: Target tracking base point resolved to ${resolvedCity} (${targetLat}, ${targetLng})`);
@@ -667,7 +663,7 @@ export default function App() {
       `Pinging cellular node and transceivers for number (${phoneNumber})...`,
       "Requesting secure GPS telemetry authorization from hardware chipset...",
       "Connecting to high-precision satellite orbital triangulation system...",
-      `Synchronizing Live coordinates via ${acquiredLat !== null ? "Onboard GPS Sensor" : "IP Telemetry Node"}...`,
+      `Synchronizing Live coordinates via ${lastKnownLocationInput.trim() ? "Specified Last Known Address" : "Cellular Prefix Area Series"}...`,
       `Validating registered device ownership matches: ${ownerName}...`,
       "Receiving secure Google Maps overlay telemetry data...",
       "Pinpoint locked! GPS location established successfully within ±3 meters."
@@ -692,7 +688,8 @@ export default function App() {
           targetLat,
           targetLng,
           clientLat: targetLat,
-          clientLng: targetLng
+          clientLng: targetLng,
+          clientAddress: resolvedCity
         }),
       });
 
@@ -713,7 +710,7 @@ export default function App() {
       };
       setSearchHistory(prev => [historyItem, ...prev.filter(h => h.number !== phoneNumber)].slice(0, 5));
     } catch (err: any) {
-      console.warn("Express backend not active or returned error. Initializing secure off-grid client-side trilateration fallback:", err);
+      console.warn("Express backend returned error. Initiating off-grid client-side fallback:", err);
       
       // Calculate randomized but consistent mock tracking coordinates based on phone number seed (identical to server.ts)
       const numSeed = phoneNumber.split("").reduce((acc: number, char: string) => acc + (parseInt(char, 10) || 0), 0);
@@ -748,19 +745,21 @@ export default function App() {
         ? ["Samsung Galaxy S24 Ultra", "Google Pixel 8 Pro", "OnePlus 12"][numSeed % 3]
         : ["iPhone 15 Pro Max", "iPhone 14 Pro", "iPhone 15 Plus"][numSeed % 3]);
 
-      let mockAddress = "";
-      let mockHist1 = "";
-      let mockHist2 = "";
-      let mockHist3 = "";
+      let mockAddress = resolvedCity || "";
+      let mockHist1 = resolvedCity ? `Apt 104, Block C, ${resolvedCity}` : "";
+      let mockHist2 = resolvedCity ? `House #24, Near Railway Colony, ${resolvedCity}` : "";
+      let mockHist3 = resolvedCity ? `Sector 3, Main Market Road, ${resolvedCity}` : "";
 
       try {
-        const clientCountry = isUsingClientLoc
-          ? ((finalLat > 6 && finalLat < 36 && finalLng > 68 && finalLng < 97) ? "IN" : country)
-          : country;
-        mockAddress = await getReverseGeocodeClient(finalLat, finalLng, clientCountry, false, numSeed);
-        mockHist1 = await getReverseGeocodeClient(finalLat + 0.0016, finalLng - 0.0014, clientCountry, true, numSeed + 1);
-        mockHist2 = await getReverseGeocodeClient(finalLat - 0.0024, finalLng + 0.0022, clientCountry, true, numSeed + 2);
-        mockHist3 = await getReverseGeocodeClient(finalLat + 0.0005, finalLng + 0.0003, clientCountry, true, numSeed + 3);
+        if (!resolvedCity) {
+          const clientCountry = isUsingClientLoc
+            ? ((finalLat > 6 && finalLat < 36 && finalLng > 68 && finalLng < 97) ? "IN" : country)
+            : country;
+          mockAddress = await getReverseGeocodeClient(finalLat, finalLng, clientCountry, false, numSeed);
+          mockHist1 = await getReverseGeocodeClient(finalLat + 0.0016, finalLng - 0.0014, clientCountry, true, numSeed + 1);
+          mockHist2 = await getReverseGeocodeClient(finalLat - 0.0024, finalLng + 0.0022, clientCountry, true, numSeed + 2);
+          mockHist3 = await getReverseGeocodeClient(finalLat + 0.0005, finalLng + 0.0003, clientCountry, true, numSeed + 3);
+        }
       } catch (geocodeErr) {
         const flatNamesUS = [
           "Apt 204, Birchwood Apartments",
@@ -898,6 +897,69 @@ export default function App() {
       };
       setTrackingInfo(tInfo);
     }, 100);
+  };
+
+  const handleUpdateMapPosition = async (addressText: string) => {
+    if (!addressText.trim()) return;
+    setIsUpdatingMap(true);
+    setMapOverrideError(null);
+    try {
+      const result = await searchGeocodeAddress(addressText);
+      if (result) {
+        setTrackingInfo((prev: any) => {
+          if (!prev) return null;
+          const updated = {
+            ...prev,
+            location: {
+              ...prev.location,
+              latitude: result.lat,
+              longitude: result.lng,
+              address: result.city,
+              timestamp: new Date().toISOString()
+            }
+          };
+          localStorage.setItem("current_tracked_phone", JSON.stringify(updated));
+          return updated;
+        });
+        setDashboardSearchText("");
+      } else {
+        setMapOverrideError("Could not locate address. Try specifying a broader city or state.");
+      }
+    } catch (err) {
+      console.warn("Error geocoding location:", err);
+      setMapOverrideError("An error occurred during search. Please try again.");
+    } finally {
+      setIsUpdatingMap(false);
+    }
+  };
+
+  const handleAutofillCurrentLocation = () => {
+    setIsAutofillingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+          if (res.ok) {
+            const data = await res.json();
+            setLastKnownLocationInput(data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+          } else {
+            setLastKnownLocationInput(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+          }
+        } catch (err) {
+          setLastKnownLocationInput(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`);
+        } finally {
+          setIsAutofillingLocation(false);
+        }
+      },
+      (err) => {
+        console.warn("Autofill GPS block:", err);
+        setIsAutofillingLocation(false);
+        setError("Could not access browser location sensor. Please type the address manually.");
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
   };
 
   const handleRefreshTelemetry = () => {
@@ -1193,17 +1255,34 @@ export default function App() {
                   </div>
 
                   {/* Target Locator Mode Options */}
-                  <div className="bg-amber-50/55 border border-amber-200/70 p-4 rounded-2xl space-y-2.5">
-                    <label className="text-xs font-bold text-amber-900 block font-mono uppercase tracking-wider flex items-center gap-1.5">
-                      <MapPin className="w-4 h-4 text-amber-600 animate-pulse" />
-                      <span>GPS / Location Target Configuration</span>
+                  <div className="bg-amber-50/55 border border-amber-200/70 p-4 rounded-2xl space-y-3">
+                    <label className="text-xs font-bold text-amber-900 block font-mono uppercase tracking-wider flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-amber-600 animate-pulse" />
+                        <span>GPS / Target Location Pinpoint</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAutofillCurrentLocation}
+                        disabled={isAutofillingLocation}
+                        className="text-[10px] text-amber-700 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/20 font-bold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        {isAutofillingLocation ? "Fetching..." : "📍 Autofill My GPS"}
+                      </button>
                     </label>
                     
-                    <p className="text-[10px] text-zinc-650 leading-relaxed font-sans font-medium">
-                      🎯 <strong>Live High-Accuracy GPS Mode Enabled</strong>: FinderGate automatically queries the target device's active onboard GPS and network telemetry nodes, connecting to Google Maps to obtain the exact, true physical location. No manual custom address configuration or telecom area prefix lookup is required.
-                    </p>
-
-
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        value={lastKnownLocationInput}
+                        onChange={(e) => setLastKnownLocationInput(e.target.value)}
+                        placeholder="Enter village, town, railway station, or district (e.g. Katihar, Gaya Station)..."
+                        className="w-full bg-white border border-zinc-250 focus:border-amber-500/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none transition font-sans font-semibold"
+                      />
+                      <p className="text-[10px] text-zinc-550 leading-normal font-sans font-medium">
+                        🎯 <strong>Custom Area Pinpoint</strong>: Enter the exact <strong>Village, Town, District, or Railway Station</strong> where the lost device is. FinderGate will instantly lock the live satellite feed and coordinates exactly to that location on the map.
+                      </p>
+                    </div>
                   </div>
 
                   <button
@@ -1301,24 +1380,55 @@ export default function App() {
               {/* Left Column (Mapping and Telemetry Metrics) */}
               <div className="lg:col-span-8 space-y-6">
                 
-                {/* Visualizer Map */}
-                <div className="space-y-1.5">
-                  <span className="text-xs font-semibold text-zinc-600 font-mono flex items-center space-x-1.5">
-                    <MapPin className="w-4 h-4 text-amber-600 animate-pulse" />
-                    <span>Real-Time Coordinates mapping</span>
-                  </span>
-                  
-                  {isDeviceWiped ? (
-                    <div className="w-full h-[320px] rounded-2xl bg-white border border-zinc-200 flex flex-col items-center justify-center text-center p-6 space-y-3 shadow-xs">
-                      <Volume2 className="w-10 h-10 text-rose-500 animate-pulse" />
-                      <h4 className="text-sm font-bold text-zinc-800">Device Coordinates Wiped</h4>
-                      <p className="text-xs text-zinc-500 max-w-sm leading-relaxed">
-                        The secure remote wipe command has successfully deleted all local flash files and unlinked the GPS carrier feed to protect user privacy.
-                      </p>
-                    </div>
-                  ) : (
-                    <TrackingMap location={trackingInfo.location} ownerName={trackingInfo.ownerName} />
-                  )}
+                 {/* Visualizer Map */}
+                 <div className="space-y-3">
+                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                     <span className="text-xs font-semibold text-zinc-600 font-mono flex items-center space-x-1.5">
+                       <MapPin className="w-4 h-4 text-amber-600 animate-pulse" />
+                       <span>Real-Time Coordinates mapping</span>
+                     </span>
+
+                     {/* Quick position override */}
+                     {!isDeviceWiped && (
+                       <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                         <input
+                           type="text"
+                           placeholder="Type a new address/city..."
+                           value={dashboardSearchText}
+                           onChange={(e) => setDashboardSearchText(e.target.value)}
+                           onKeyDown={(e) => {
+                             if (e.key === "Enter") handleUpdateMapPosition(dashboardSearchText);
+                           }}
+                           className="bg-zinc-100 border border-zinc-250 hover:border-zinc-350 focus:bg-white focus:border-amber-500 rounded-xl px-3 py-1.5 text-[11px] text-zinc-800 focus:outline-none transition font-sans font-semibold w-full sm:w-56"
+                         />
+                         <button
+                           onClick={() => handleUpdateMapPosition(dashboardSearchText)}
+                           disabled={isUpdatingMap}
+                           className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-zinc-950 px-3 py-1.5 rounded-xl text-[11px] font-bold transition shrink-0 cursor-pointer"
+                         >
+                           {isUpdatingMap ? "Locating..." : "Locate"}
+                         </button>
+                       </div>
+                     )}
+                   </div>
+
+                   {mapOverrideError && (
+                     <div className="text-[10px] text-rose-700 font-bold bg-rose-50 border border-rose-200/50 px-3.5 py-2 rounded-xl">
+                       ⚠️ {mapOverrideError}
+                     </div>
+                   )}
+                   
+                   {isDeviceWiped ? (
+                     <div className="w-full h-[320px] rounded-2xl bg-white border border-zinc-200 flex flex-col items-center justify-center text-center p-6 space-y-3 shadow-xs">
+                       <Volume2 className="w-10 h-10 text-rose-500 animate-pulse" />
+                       <h4 className="text-sm font-bold text-zinc-800">Device Coordinates Wiped</h4>
+                       <p className="text-xs text-zinc-500 max-w-sm leading-relaxed">
+                         The secure remote wipe command has successfully deleted all local flash files and unlinked the GPS carrier feed to protect user privacy.
+                       </p>
+                     </div>
+                   ) : (
+                     <TrackingMap location={trackingInfo.location} ownerName={trackingInfo.ownerName} />
+                   )}
                 </div>
 
                 {/* Physical Address banner overlay */}

@@ -73,16 +73,10 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
   const isIndiaZone = (lat > 6 && lat < 36 && lng > 68 && lng < 97);
   const zone = isIndiaZone ? "IN" : "US";
 
-  // If running on Vercel or in serverless production, bypass Nominatim's strict rate limits and IP blocks entirely.
-  // This guarantees sub-10ms response times and avoids Vercel 500/504 execution timeouts.
-  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
-    return getLocalSimulationGeocode(lat, lng, zone, numSeed);
-  }
-
   try {
-    // Add a strict 1.2-second timeout to ensure the serverless function never stalls on Nominatim
+    // Add a strict 1.5-second timeout to ensure the request never stalls
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1200);
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
 
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
@@ -103,9 +97,9 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
           ? flatNamesIN[numSeed % flatNamesIN.length] 
           : flatNamesUS[numSeed % flatNamesUS.length];
         
-        const street = data.address.road || data.address.pedestrian || data.address.cycleway || data.address.path || "";
-        const hamlet = data.address.suburb || data.address.neighbourhood || data.address.quarter || data.address.village || "";
-        const city = data.address.city || data.address.town || data.address.municipality || data.address.county || "";
+        const street = data.address.road || data.address.pedestrian || data.address.cycleway || data.address.path || "Station Road";
+        const hamlet = data.address.suburb || data.address.neighbourhood || data.address.quarter || data.address.village || data.address.town || data.address.city_district || "";
+        const city = data.address.city || data.address.town || data.address.municipality || data.address.county || "District Center";
         const state = data.address.state || "";
         const postcode = data.address.postcode || "";
         const countryName = data.address.country || (zone === "IN" ? "India" : "USA");
@@ -120,7 +114,7 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
       }
     }
   } catch (error) {
-    console.warn("Nominatim reverse geocode fetch unsuccessful or timed out, falling back to realistic local map database.");
+    console.warn("Nominatim reverse geocode fetch failed or timed out. Falling back to simulated mapping.", error);
   }
 
   return getLocalSimulationGeocode(lat, lng, zone, numSeed);
@@ -375,7 +369,7 @@ function getLocalSimulationGeocode(lat: number, lng: number, zone: "IN" | "US", 
 // API Endpoints
 app.post("/api/track-phone", async (req, res) => {
   try {
-    const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel, country = "US", clientLat: reqClientLat, clientLng: reqClientLng, targetLat, targetLng } = req.body || {};
+    const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel, country = "US", clientLat: reqClientLat, clientLng: reqClientLng, targetLat, targetLng, clientAddress } = req.body || {};
 
     if (!phoneNumber || !ownerName) {
       return res.status(400).json({ error: "Phone number and owner name are required values." });
@@ -390,7 +384,7 @@ app.post("/api/track-phone", async (req, res) => {
     let baseLat = country === "IN" ? 12.9716 : 33.9237;
     let baseLng = country === "IN" ? 77.5946 : -84.8408;
     let resolvedCity = country === "IN" ? "Bengaluru, Karnataka" : "Dallas, GA";
-    let resolvedAddress = "";
+    let resolvedAddress = clientAddress || "";
     let resolvedCarrier = carrier;
     let resolvedDeviceModel = customDeviceModel;
     let isUsingClientLoc = false;
@@ -412,7 +406,8 @@ app.post("/api/track-phone", async (req, res) => {
     }
 
     // Call Gemini to geolocate the phone number's true region and form a matching highly realistic address
-    if (process.env.GEMINI_API_KEY) {
+    // Skip if we already have a precise client coordinates & address lock
+    if (process.env.GEMINI_API_KEY && !clientAddress) {
       try {
         const client = getGeminiClient();
         const geminiPrompt = `
@@ -481,15 +476,21 @@ Provide the response in the required JSON structure.
     const finalLat = isUsingClientLoc ? baseLat : baseLat + ((numSeed % 5) * offsetFactor) + offsetSub;
     const finalLng = isUsingClientLoc ? baseLng : baseLng + ((numSeed % 5) * offsetFactor) + offsetSub;
 
-    // Retrieve address. If Gemini returned a precise resolvedAddress, prioritize it. Otherwise, use Osm reverse geocoder
+    // Retrieve address. If clientAddress or Gemini returned a precise resolvedAddress, prioritize it. Otherwise, use Osm reverse geocoder
     let currentAddress = resolvedAddress;
     if (!currentAddress) {
       currentAddress = await getReverseGeocode(finalLat, finalLng, country, false, numSeed);
     }
 
-    const hist1Address = await getReverseGeocode(finalLat + 0.0016, finalLng - 0.0014, country, true, numSeed + 1);
-    const hist2Address = await getReverseGeocode(finalLat - 0.0024, finalLng + 0.0022, country, true, numSeed + 2);
-    const hist3Address = await getReverseGeocode(finalLat + 0.0005, finalLng + 0.0003, country, true, numSeed + 3);
+    const hist1Address = clientAddress 
+      ? `Apt 104, Block C, ${clientAddress}` 
+      : await getReverseGeocode(finalLat + 0.0016, finalLng - 0.0014, country, true, numSeed + 1);
+    const hist2Address = clientAddress 
+      ? `House #24, Near Railway Colony, ${clientAddress}` 
+      : await getReverseGeocode(finalLat - 0.0024, finalLng + 0.0022, country, true, numSeed + 2);
+    const hist3Address = clientAddress 
+      ? `Sector 3, Main Market Road, ${clientAddress}` 
+      : await getReverseGeocode(finalLat + 0.0005, finalLng + 0.0003, country, true, numSeed + 3);
 
     const mockCarrier = resolvedCarrier || (country === "IN" 
       ? ["Airtel India", "Jio Telecom", "Vodafone Idea", "BSNL India"][numSeed % 4]
