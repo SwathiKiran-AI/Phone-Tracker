@@ -465,20 +465,28 @@ async function setupServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
+
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server is running on http://0.0.0.0:${PORT}`);
+    });
+  } else if (!process.env.VERCEL) {
     console.log("Starting server in PRODUCTION mode...");
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
-  }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server is running on http://0.0.0.0:${PORT}`);
-  });
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server is running on http://0.0.0.0:${PORT}`);
+    });
+  } else {
+    console.log("Starting server in VERCEL serverless environment...");
+  }
 }
 
 setupServer().catch((err) => {
   console.error("Failed to start full-stack server setup:", err);
 });
+
+export default app;

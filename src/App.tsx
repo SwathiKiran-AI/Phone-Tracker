@@ -408,7 +408,7 @@ export default function App() {
   const [carrier, setCarrier] = useState("Verizon Wireless");
   
   // Custom tracking options for pinpointing state and locations
-  const [locMode, setLocMode] = useState<"live" | "telecom" | "custom">("live");
+  const [locMode, setLocMode] = useState<"live" | "telecom" | "custom">("telecom");
   const [customTargetAddress, setCustomTargetAddress] = useState("");
   
   // Decoys collapse/expand view state
@@ -611,10 +611,17 @@ export default function App() {
           };
           navigator.geolocation.getCurrentPosition(resolve, reject, options);
         });
-        targetLat = pos.coords.latitude;
-        targetLng = pos.coords.longitude;
-        resolvedCity = "Live Browser GPS locked";
-        console.log("GSM Simulator: Browser live GPS coordinates acquired:", targetLat, targetLng);
+        const glat = pos.coords.latitude;
+        const glng = pos.coords.longitude;
+        const isIndiaCoords = (glat > 6 && glat < 36 && glng > 68 && glng < 97);
+        if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
+          targetLat = glat;
+          targetLng = glng;
+          resolvedCity = "Live Browser GPS locked";
+          console.log("GSM Simulator: Browser live GPS coordinates acquired and verified:", targetLat, targetLng);
+        } else {
+          console.warn(`GSM Simulator: Acquired browser GPS is in ${isIndiaCoords ? "India" : "the US/another region"}, but target country is ${country === "IN" ? "India" : "US"}. Reverting to telecom area-code triangulation.`);
+        }
       } catch (geoErr) {
         console.warn("Browser GPS permission blocked/timed out. Attempting IP Geolocation fallback...", geoErr);
         try {
@@ -622,10 +629,17 @@ export default function App() {
           if (ipRes.ok) {
             const ipData = await ipRes.json();
             if (ipData.latitude && ipData.longitude) {
-              targetLat = ipData.latitude;
-              targetLng = ipData.longitude;
-              resolvedCity = `${ipData.city || "Local"}, ${ipData.region || "IP Location"}`;
-              console.log("GSM Simulator: IP Geolocation locked successfully:", targetLat, targetLng);
+              const iplat = ipData.latitude;
+              const iplng = ipData.longitude;
+              const isIndiaIp = (iplat > 6 && iplat < 36 && iplng > 68 && iplng < 97);
+              if ((country === "IN" && isIndiaIp) || (country === "US" && !isIndiaIp)) {
+                targetLat = iplat;
+                targetLng = iplng;
+                resolvedCity = `${ipData.city || "Local"}, ${ipData.region || "IP Location"}`;
+                console.log("GSM Simulator: IP Geolocation locked and verified successfully:", targetLat, targetLng);
+              } else {
+                console.warn(`GSM Simulator: IP Geolocation is in ${isIndiaIp ? "India" : "the US/another region"}, but target country is ${country === "IN" ? "India" : "US"}. Reverting to telecom area-code triangulation.`);
+              }
             }
           }
         } catch (ipErr) {
@@ -635,10 +649,15 @@ export default function App() {
     } else if (locMode === "custom" && customTargetAddress.trim()) {
       const geo = await searchGeocodeAddress(customTargetAddress);
       if (geo) {
-        targetLat = geo.lat;
-        targetLng = geo.lng;
-        resolvedCity = geo.city;
-        console.log("GSM Simulator: Geocoded custom target address successfully:", targetLat, targetLng);
+        const isIndiaGeo = (geo.lat > 6 && geo.lat < 36 && geo.lng > 68 && geo.lng < 97);
+        if ((country === "IN" && isIndiaGeo) || (country === "US" && !isIndiaGeo)) {
+          targetLat = geo.lat;
+          targetLng = geo.lng;
+          resolvedCity = geo.city;
+          console.log("GSM Simulator: Geocoded custom target address successfully:", targetLat, targetLng);
+        } else {
+          console.warn(`GSM Simulator: Custom address is in ${isIndiaGeo ? "India" : "the US/another region"}, but target country is ${country === "IN" ? "India" : "US"}. Reverting to telecom area-code triangulation.`);
+        }
       } else {
         console.warn("Could not geocode custom address. Reverting to cellular prefix triangulation.");
       }
