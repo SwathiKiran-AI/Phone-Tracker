@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Compass, ZoomIn, ZoomOut, Navigation, Map, Layers } from "lucide-react";
 import { TrackingLocation } from "../types";
+import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from "@vis.gl/react-google-maps";
+
+const GOOGLE_MAPS_KEY =
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  "";
+const hasValidKey = Boolean(GOOGLE_MAPS_KEY) && GOOGLE_MAPS_KEY !== "";
 
 interface TrackingMapProps {
   location: TrackingLocation;
@@ -25,6 +32,7 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
 
   // Dynamic script/style injection of Leaflet
   useEffect(() => {
+    if (hasValidKey) return; // Skip Leaflet if Google Maps is active
     const cssId = "leaflet-css";
     if (!document.getElementById(cssId)) {
       const link = document.createElement("link");
@@ -59,6 +67,7 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
 
   // Initialize Map Instance on target coordinates when loaded
   useEffect(() => {
+    if (hasValidKey) return; // Skip Leaflet if Google Maps is active
     if (!isLoaded || !mapContainerRef.current) return;
 
     const L = (window as any).L;
@@ -130,6 +139,7 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
 
   // Sync coordinate changes, zooms, and map modes dynamically
   useEffect(() => {
+    if (hasValidKey) return; // Skip Leaflet if Google Maps is active
     if (!isLoaded || !mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
 
@@ -263,12 +273,33 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
     <div className="flex flex-col gap-4">
       {/* Map Viewer Box */}
       <div ref={containerRef} className="relative w-full h-[320px] rounded-2xl border border-zinc-200 bg-zinc-950 overflow-hidden shadow-sm flex flex-col justify-end">
-        {/* Dynamic Leaflet Target Map Base */}
-        <div 
-          ref={mapContainerRef} 
-          className="absolute inset-0 z-0 bg-zinc-900" 
-          style={{ width: "100%", height: "100%" }}
-        />
+        {/* Map Base Selection */}
+        {hasValidKey ? (
+          <div className="absolute inset-0 z-0 bg-zinc-900" style={{ width: "100%", height: "100%" }}>
+            <APIProvider apiKey={GOOGLE_MAPS_KEY} version="weekly">
+              <GoogleMap
+                center={{ lat: location.latitude, lng: location.longitude }}
+                zoom={Math.round(13 + (zoom - 3.0) * 1.5)}
+                mapTypeId={mapMode === "standard" ? "roadmap" : mapMode === "satellite" ? "satellite" : "hybrid"}
+                mapId="DEMO_MAP_ID"
+                internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+                style={{ width: "100%", height: "100%" }}
+                disableDefaultUI={true}
+              >
+                <AdvancedMarker position={{ lat: location.latitude, lng: location.longitude }}>
+                  <Pin background="#eab308" borderColor="#ffffff" glyphColor="#ffffff" />
+                </AdvancedMarker>
+              </GoogleMap>
+            </APIProvider>
+          </div>
+        ) : (
+          /* Dynamic Leaflet Target Map Base fallback when no Google Maps key configured */
+          <div 
+            ref={mapContainerRef} 
+            className="absolute inset-0 z-0 bg-zinc-900" 
+            style={{ width: "100%", height: "100%" }}
+          />
+        )}
 
         {/* Military Sweeping & Triangulation radar lines overlay */}
         <canvas
@@ -280,10 +311,12 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
         <div className="absolute top-3 left-3 bg-white/95 border border-zinc-200 px-3 py-1.5 rounded-xl flex items-center space-x-2 shadow-sm backdrop-blur-md z-20 transition">
           <Navigation className="w-4 h-4 text-amber-500 animate-pulse rotate-45" />
           <div>
-            <span className="text-[9px] font-mono font-bold text-zinc-900 uppercase tracking-wider block">
-              {mapMode === "standard" ? "TOKYO-US VECTOR LAND GRID" : mapMode === "satellite" ? "LIVE TELEMETRY COLD SATELLITE" : "AUTONOMOUS TRILATERATION FEED"}
+            <span className="text-[9px] font-mono font-bold text-zinc-900 uppercase tracking-wider block font-semibold">
+              {hasValidKey ? "CONNECTED TO GOOGLE MAPS" : "LIVE DEVICE GPS TELEMETRY"}
             </span>
-            <span className="text-[8px] text-zinc-500 font-mono block">SIGNAL MAPPED VIA HYBRID LOCALIZATION PIN</span>
+            <span className="text-[8px] text-zinc-500 font-mono block">
+              {hasValidKey ? "OFFICIAL SATELLITE OVERLAY FEED" : "HYBRID SECURE BASE STATIONS FEED"}
+            </span>
           </div>
         </div>
 
@@ -344,18 +377,18 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
       <div className="bg-white border border-zinc-200 px-4 py-3.5 rounded-2xl text-[11px] font-mono text-zinc-700 shadow-xs space-y-2.5 block">
         <div className="font-bold text-xs text-zinc-900 border-b border-zinc-100 pb-2 mb-1 flex items-center justify-between">
           <span className="tracking-tight text-zinc-900">GPS TELEMETRY TARGET FEED</span>
-          <span className="text-[10px] text-amber-600 px-2 py-0.5 bg-amber-50 rounded-md border border-amber-200/50 uppercase tracking-wider animate-pulse">
+          <span className="text-[10px] text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded-md border border-emerald-200/50 uppercase tracking-wider animate-pulse font-semibold">
             Locked Online
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-zinc-650 font-mono">
           <div className="flex justify-between items-center py-1 border-b border-dashed border-zinc-100 sm:border-0">
             <span className="text-zinc-400 uppercase tracking-wider">Device ID Marker:</span>
-            <span className="font-bold text-zinc-805 text-zinc-800 font-sans">Target Lost Device</span>
+            <span className="font-bold text-zinc-800 font-sans">Target Lost Device</span>
           </div>
           <div className="flex justify-between items-center py-1 border-b border-dashed border-zinc-100 sm:border-0">
             <span className="text-zinc-400 uppercase tracking-wider">Estimated Precision Check:</span>
-            <span className="font-bold text-amber-600">±{location.accuracyMeters} METERS</span>
+            <span className="font-bold text-emerald-600">±{location.accuracyMeters} METERS</span>
           </div>
           <div className="flex justify-between items-center py-1 border-b border-dashed border-zinc-100 sm:border-0">
             <span className="text-zinc-400 uppercase tracking-wider">Physical Latitude:</span>
@@ -372,6 +405,24 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
             <span className="font-bold text-zinc-800 text-[12.5px] font-sans leading-relaxed">{location.address}</span>
           </div>
         )}
+
+        <div className="border-t border-zinc-200 pt-3 mt-1.5 flex flex-col gap-2">
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-md shadow-emerald-600/10 hover:shadow-emerald-600/25"
+          >
+            <Map className="w-4 h-4" />
+            Open Exact GPS Pin in Google Maps App / Web
+          </a>
+
+          {!hasValidKey && (
+            <div className="text-[9.5px] bg-amber-50/60 border border-amber-200/40 p-2.5 rounded-xl text-amber-900 leading-normal">
+              💡 <strong>Tip</strong>: To embed Google Maps directly inside this frame, open <strong>Settings</strong> (⚙️ top-right) → <strong>Secrets</strong> and add your <code>GOOGLE_MAPS_PLATFORM_KEY</code>.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

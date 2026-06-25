@@ -478,8 +478,8 @@ Provide the response in the required JSON structure.
     const offsetFactor = isUsingClientLoc ? 0.00001 : 0.0004;
     const offsetSub = isUsingClientLoc ? 0.0 : -0.0006;
 
-    const finalLat = baseLat + ((numSeed % 5) * offsetFactor) + offsetSub;
-    const finalLng = baseLng + ((numSeed % 5) * offsetFactor) + offsetSub;
+    const finalLat = isUsingClientLoc ? baseLat : baseLat + ((numSeed % 5) * offsetFactor) + offsetSub;
+    const finalLng = isUsingClientLoc ? baseLng : baseLng + ((numSeed % 5) * offsetFactor) + offsetSub;
 
     // Retrieve address. If Gemini returned a precise resolvedAddress, prioritize it. Otherwise, use Osm reverse geocoder
     let currentAddress = resolvedAddress;
