@@ -408,12 +408,30 @@ export default function App() {
   const [carrier, setCarrier] = useState("Verizon Wireless");
   
   // Custom tracking options for pinpointing state and locations
-  const [locMode, setLocMode] = useState<"live" | "telecom" | "custom">("telecom");
+  const [locMode, setLocMode] = useState<"live" | "telecom" | "custom">("live");
   const [customTargetAddress, setCustomTargetAddress] = useState("");
   
   // Decoys collapse/expand view state
   const [showAdvancedDecoys, setShowAdvancedDecoys] = useState(false);
   const [showHardwareCommands, setShowHardwareCommands] = useState(false);
+
+  // Auto-detect visitor country on initial load to avoid country mismatches
+  useEffect(() => {
+    fetch("https://ipapi.co/json/")
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.country_code) {
+          if (data.country_code === "IN") {
+            setCountry("IN");
+          } else if (data.country_code === "US") {
+            setCountry("US");
+          }
+        }
+      })
+      .catch(err => {
+        console.warn("Could not auto-detect visitor country via IP:", err);
+      });
+  }, []);
 
   // Sync carrier and device model selections dynamically
   useEffect(() => {
@@ -614,14 +632,11 @@ export default function App() {
         const glat = pos.coords.latitude;
         const glng = pos.coords.longitude;
         const isIndiaCoords = (glat > 6 && glat < 36 && glng > 68 && glng < 97);
-        if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
-          targetLat = glat;
-          targetLng = glng;
-          resolvedCity = "Live Browser GPS locked";
-          console.log("GSM Simulator: Browser live GPS coordinates acquired and verified:", targetLat, targetLng);
-        } else {
-          console.warn(`GSM Simulator: Acquired browser GPS is in ${isIndiaCoords ? "India" : "the US/another region"}, but target country is ${country === "IN" ? "India" : "US"}. Reverting to telecom area-code triangulation.`);
-        }
+        targetLat = glat;
+        targetLng = glng;
+        resolvedCity = "Live Browser GPS locked";
+        setCountry(isIndiaCoords ? "IN" : "US");
+        console.log("GSM Simulator: Browser live GPS coordinates acquired successfully:", targetLat, targetLng);
       } catch (geoErr) {
         console.warn("Browser GPS permission blocked/timed out. Attempting IP Geolocation fallback...", geoErr);
         try {
@@ -632,14 +647,11 @@ export default function App() {
               const iplat = ipData.latitude;
               const iplng = ipData.longitude;
               const isIndiaIp = (iplat > 6 && iplat < 36 && iplng > 68 && iplng < 97);
-              if ((country === "IN" && isIndiaIp) || (country === "US" && !isIndiaIp)) {
-                targetLat = iplat;
-                targetLng = iplng;
-                resolvedCity = `${ipData.city || "Local"}, ${ipData.region || "IP Location"}`;
-                console.log("GSM Simulator: IP Geolocation locked and verified successfully:", targetLat, targetLng);
-              } else {
-                console.warn(`GSM Simulator: IP Geolocation is in ${isIndiaIp ? "India" : "the US/another region"}, but target country is ${country === "IN" ? "India" : "US"}. Reverting to telecom area-code triangulation.`);
-              }
+              targetLat = iplat;
+              targetLng = iplng;
+              resolvedCity = `${ipData.city || "Local"}, ${ipData.region || "IP Location"}`;
+              setCountry(isIndiaIp ? "IN" : "US");
+              console.log("GSM Simulator: IP Geolocation locked successfully:", targetLat, targetLng);
             }
           }
         } catch (ipErr) {
@@ -650,14 +662,11 @@ export default function App() {
       const geo = await searchGeocodeAddress(customTargetAddress);
       if (geo) {
         const isIndiaGeo = (geo.lat > 6 && geo.lat < 36 && geo.lng > 68 && geo.lng < 97);
-        if ((country === "IN" && isIndiaGeo) || (country === "US" && !isIndiaGeo)) {
-          targetLat = geo.lat;
-          targetLng = geo.lng;
-          resolvedCity = geo.city;
-          console.log("GSM Simulator: Geocoded custom target address successfully:", targetLat, targetLng);
-        } else {
-          console.warn(`GSM Simulator: Custom address is in ${isIndiaGeo ? "India" : "the US/another region"}, but target country is ${country === "IN" ? "India" : "US"}. Reverting to telecom area-code triangulation.`);
-        }
+        targetLat = geo.lat;
+        targetLng = geo.lng;
+        resolvedCity = geo.city;
+        setCountry(isIndiaGeo ? "IN" : "US");
+        console.log("GSM Simulator: Geocoded custom target address successfully:", targetLat, targetLng);
       } else {
         console.warn("Could not geocode custom address. Reverting to cellular prefix triangulation.");
       }
@@ -1265,6 +1274,12 @@ export default function App() {
                             setCountry("IN");
                           } else if (val.startsWith("+1") || (val.startsWith("1") && clean.length > 10)) {
                             setCountry("US");
+                          } else if (clean.length === 10) {
+                            if (/^[6-9]/.test(clean)) {
+                              setCountry("IN");
+                            } else {
+                              setCountry("US");
+                            }
                           }
                         }}
                         className="w-full bg-zinc-50 border border-zinc-250 focus:bg-white focus:border-amber-500/50 rounded-xl pl-10 pr-4 py-2.5 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none transition font-mono font-semibold"
