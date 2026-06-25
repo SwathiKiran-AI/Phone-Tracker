@@ -128,32 +128,6 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
 
 // Helper function to generate highly realistic local addresses from in-memory coordinates database
 function getLocalSimulationGeocode(lat: number, lng: number, zone: "IN" | "US", numSeed: number): string {
-  const flatNamesUS = [
-    "Apt 204, Birchwood Apartments",
-    "Rowhouse #15, Paulding Coves",
-    "Flat 303, Sweetwater Ridge",
-    "House #184, Whispering Pines",
-    "Suite 102, Laurel Springs",
-    "Apt 4B, Dogwood Heights Condos",
-    "Villa #7, Dallas Creek Estates",
-    "Apt 1102, Merchant Lakes Towers",
-    "Rowhouse #32, Silver Creek",
-    "Apt 208, Paulding Meadows"
-  ];
-
-  const flatNamesIN = [
-    "Flat 402, Prestige Bluechip Villa",
-    "House #24, Sobha Tulip Residency",
-    "Flat G-3, Brigade Meadows",
-    "Mantri Elegance, Block A-104",
-    "Rowhouse #12, Adarsh Palm Retreat",
-    "Flat 508, Purva Skywood Apartments",
-    "Villa #18, Prestige Lakeside Habitat",
-    "Apt 301, Salarpuria Greenage",
-    "Block C-202, Assetz Marq",
-    "Flat 104, Shreeram Crest Apartments"
-  ];
-
   const usCities = [
     { city: "New York City", state: "NY", postcode: "10001", lat: 40.7128, lng: -74.0060 },
     { city: "Los Angeles", state: "CA", postcode: "90001", lat: 34.0522, lng: -118.2437 },
@@ -194,43 +168,206 @@ function getLocalSimulationGeocode(lat: number, lng: number, zone: "IN" | "US", 
     }
   }
 
+  let flat = "";
+  let street = "";
+  let area = "";
+
   if (zone === "IN") {
-    const flat = flatNamesIN[numSeed % flatNamesIN.length];
-    const streets = [
-      "12th Main Road, HAL 2nd Stage",
-      "CMH Road, Lakshmipuram",
-      "100 Feet Road",
-      "80 Feet Road, Sector 4",
-      "MG Road, Central Zone"
-    ];
-    const areas = [
-      "Subdivision A",
-      "Central Market Area",
-      "Green View Sector",
-      "Garrison Area",
-      "Residential Hub"
-    ];
-    const street = streets[(numSeed + 1) % streets.length];
-    const area = areas[(numSeed + 2) % areas.length];
+    const cityKey = nearest.city.toLowerCase();
+    
+    if (cityKey.includes("delhi")) {
+      const flats = [
+        "Apt 4B, DDA Flats Pocket 1",
+        "Block C-2, Vasant Kunj",
+        "House #45, Shanti Niketan",
+        "Flat 302, DLF Capital Greens",
+        "House #14, Amrita Shergill Marg",
+        "Apt A-12, Mayur Vihar Phase 1",
+        "Flat 108, Panchsheel Enclave"
+      ];
+      const streets = [
+        "Barakhamba Road",
+        "Prithviraj Road",
+        "Ring Road",
+        "Janpath",
+        "Sansad Marg",
+        "Nelson Mandela Marg",
+        "Outer Ring Road"
+      ];
+      const areas = [
+        "Connaught Place",
+        "Chanakyapuri",
+        "Lajpat Nagar IV",
+        "Saket District",
+        "Dwarka Sector 11",
+        "Greater Kailash II"
+      ];
+      flat = flats[numSeed % flats.length];
+      street = streets[(numSeed + 1) % streets.length];
+      area = areas[(numSeed + 2) % areas.length];
+    } else if (cityKey.includes("bengaluru") || cityKey.includes("bangalore")) {
+      const flats = [
+        "Flat 402, Prestige Bluechip Villa",
+        "House #24, Sobha Tulip Residency",
+        "Flat G-3, Brigade Meadows",
+        "Mantri Elegance, Block A-104",
+        "Rowhouse #12, Adarsh Palm Retreat",
+        "Flat 508, Purva Skywood",
+        "Villa #18, Prestige Lakeside Habitat"
+      ];
+      const streets = [
+        "12th Main Road, HAL 2nd Stage",
+        "CMH Road",
+        "100 Feet Road",
+        "80 Feet Road, Sector 4",
+        "MG Road",
+        "Sarjapur Main Road"
+      ];
+      const areas = [
+        "Indiranagar",
+        "Koramangala",
+        "HSR Layout",
+        "Whitefield",
+        "Electronic City Phase 1",
+        "Jayanagar 4th Block"
+      ];
+      flat = flats[numSeed % flats.length];
+      street = streets[(numSeed + 1) % streets.length];
+      area = areas[(numSeed + 2) % areas.length];
+    } else if (cityKey.includes("mumbai")) {
+      const flats = [
+        "Flat 1402, Lodha Bellissimo",
+        "Apt 22, Sea Breeze Apartments",
+        "Flat 8B, Raheja Legend",
+        "House #10, Pali Hill Estates",
+        "Apt 304, Hiranandani Gardens",
+        "Suite 15, Oberoi Exquisite"
+      ];
+      const streets = [
+        "Carter Road",
+        "Linking Road",
+        "Marine Drive",
+        "Pedder Road",
+        "Altamount Road",
+        "Senapati Bapat Marg"
+      ];
+      const areas = [
+        "Bandra West",
+        "Worli Seaface",
+        "Powai Lake District",
+        "Colaba Causeway",
+        "Andheri Lokhandwala",
+        "Juhu Vile Parle"
+      ];
+      flat = flats[numSeed % flats.length];
+      street = streets[(numSeed + 1) % streets.length];
+      area = areas[(numSeed + 2) % areas.length];
+    } else {
+      // General India fallback
+      const flats = [
+        "Flat 104, Shreeram Crest",
+        "Apt 301, Green Meadows",
+        "House #55, Royal Residency",
+        "Block C-202, Assetz Heights"
+      ];
+      const streets = [
+        "MG Road",
+        "Station Road",
+        "Main Bypass",
+        "Church Road"
+      ];
+      const areas = [
+        "Central Zone",
+        "Civil Lines",
+        "Subdivision A",
+        "Residential Hub"
+      ];
+      flat = flats[numSeed % flats.length];
+      street = streets[(numSeed + 1) % streets.length];
+      area = areas[(numSeed + 2) % areas.length];
+    }
+
     return `${flat}, ${street}, ${area}, ${nearest.city}, ${nearest.state}, ${nearest.postcode}, India`;
   } else {
-    const flat = flatNamesUS[numSeed % flatNamesUS.length];
-    const streets = [
-      "Main Street",
-      "Grand Avenue",
-      "Pine Road",
-      "Oak Drive",
-      "Parkway Avenue"
-    ];
-    const areas = [
-      "Downtown Area",
-      "West End District",
-      "Northside Sub",
-      "Valley View Sector",
-      "Commercial Center"
-    ];
-    const street = streets[(numSeed + 1) % streets.length];
-    const area = areas[(numSeed + 2) % areas.length];
+    const cityKey = nearest.city.toLowerCase();
+    
+    if (cityKey.includes("new york")) {
+      const flats = [
+        "Apt 14B, The San Remo",
+        "Suite 802, Tribeca Lofts",
+        "Apt 3A, Greenwich Village Townhouse",
+        "Penthouse 4, Central Park Towers",
+        "Unit 502, DUMBO Waterfront Condos"
+      ];
+      const streets = [
+        "Broadway",
+        "Fifth Avenue",
+        "Park Avenue",
+        "Madison Avenue",
+        "West 4th Street",
+        "Bedford Avenue"
+      ];
+      const areas = [
+        "Manhattan",
+        "Brooklyn Heights",
+        "Upper West Side",
+        "Williamsburg",
+        "Greenwich Village"
+      ];
+      flat = flats[numSeed % flats.length];
+      street = streets[(numSeed + 1) % streets.length];
+      area = areas[(numSeed + 2) % areas.length];
+    } else if (cityKey.includes("los angeles")) {
+      const flats = [
+        "Apt 402, Sunset Plaza Condos",
+        "House #104, Beverly Hills Estates",
+        "Suite 312, Santa Monica Lofts",
+        "Villa #9, Malibu Crest Estates"
+      ];
+      const streets = [
+        "Sunset Boulevard",
+        "Wilshire Boulevard",
+        "Mulholland Drive",
+        "Rodeo Drive",
+        "Abbot Kinney Boulevard"
+      ];
+      const areas = [
+        "Beverly Hills",
+        "Santa Monica",
+        "Venice Beach",
+        "Hollywood Hills",
+        "Westwood"
+      ];
+      flat = flats[numSeed % flats.length];
+      street = streets[(numSeed + 1) % streets.length];
+      area = areas[(numSeed + 2) % areas.length];
+    } else {
+      // General US fallback
+      const flats = [
+        "Apt 204, Birchwood Apartments",
+        "Rowhouse #15, Paulding Coves",
+        "Flat 303, Sweetwater Ridge",
+        "House #184, Whispering Pines",
+        "Suite 102, Laurel Springs"
+      ];
+      const streets = [
+        "Main Street",
+        "Grand Avenue",
+        "Pine Road",
+        "Oak Drive",
+        "Parkway Avenue"
+      ];
+      const areas = [
+        "Downtown Area",
+        "West End District",
+        "Northside Sub",
+        "Valley View Sector"
+      ];
+      flat = flats[numSeed % flats.length];
+      street = streets[(numSeed + 1) % streets.length];
+      area = areas[(numSeed + 2) % areas.length];
+    }
+
     return `${flat}, ${street}, ${area}, ${nearest.city}, ${nearest.state}, ${nearest.postcode}, USA`;
   }
 }
