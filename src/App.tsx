@@ -618,8 +618,13 @@ export default function App() {
     let targetLat = resolvedLoc.lat;
     let targetLng = resolvedLoc.lng;
     let resolvedCity = resolvedLoc.city;
+    let isMismatchWarning = false;
 
     if (locMode === "live") {
+      let acquiredLat: number | null = null;
+      let acquiredLng: number | null = null;
+      let tempCity = "";
+
       try {
         const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
           const options = {
@@ -629,12 +634,10 @@ export default function App() {
           };
           navigator.geolocation.getCurrentPosition(resolve, reject, options);
         });
-        const glat = pos.coords.latitude;
-        const glng = pos.coords.longitude;
-        targetLat = glat;
-        targetLng = glng;
-        resolvedCity = "Live Browser GPS locked";
-        console.log("GSM Simulator: Browser live GPS coordinates acquired successfully:", targetLat, targetLng);
+        acquiredLat = pos.coords.latitude;
+        acquiredLng = pos.coords.longitude;
+        tempCity = "Live Browser GPS locked";
+        console.log("GSM Simulator: Browser live GPS coordinates acquired successfully:", acquiredLat, acquiredLng);
       } catch (geoErr) {
         console.warn("Browser GPS permission blocked/timed out. Attempting IP Geolocation fallback...", geoErr);
         try {
@@ -642,25 +645,45 @@ export default function App() {
           if (ipRes.ok) {
             const ipData = await ipRes.json();
             if (ipData.latitude && ipData.longitude) {
-              const iplat = ipData.latitude;
-              const iplng = ipData.longitude;
-              targetLat = iplat;
-              targetLng = iplng;
-              resolvedCity = `${ipData.city || "Local"}, ${ipData.region || "IP Location"}`;
-              console.log("GSM Simulator: IP Geolocation locked successfully:", targetLat, targetLng);
+              acquiredLat = ipData.latitude;
+              acquiredLng = ipData.longitude;
+              tempCity = `${ipData.city || "Local"}, ${ipData.region || "IP Location"}`;
+              console.log("GSM Simulator: IP Geolocation locked successfully:", acquiredLat, acquiredLng);
             }
           }
         } catch (ipErr) {
           console.warn("IP Geolocation fallback failed. Reverting to cellular prefix triangulation.", ipErr);
         }
       }
+
+      if (acquiredLat !== null && acquiredLng !== null) {
+        const isIndiaCoords = (acquiredLat > 6 && acquiredLat < 36 && acquiredLng > 68 && acquiredLng < 97);
+        const isCountryMatch = (country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords);
+
+        if (isCountryMatch) {
+          targetLat = acquiredLat;
+          targetLng = acquiredLng;
+          resolvedCity = tempCity;
+        } else {
+          isMismatchWarning = true;
+          console.warn(`GSM Simulator: Acquired browser GPS is in ${isIndiaCoords ? "India" : "the US/another region"}, but target country is ${country === "IN" ? "India" : "US"}. Reverting to telecom area-code triangulation.`);
+        }
+      }
     } else if (locMode === "custom" && customTargetAddress.trim()) {
       const geo = await searchGeocodeAddress(customTargetAddress);
       if (geo) {
-        targetLat = geo.lat;
-        targetLng = geo.lng;
-        resolvedCity = geo.city;
-        console.log("GSM Simulator: Geocoded custom target address successfully:", targetLat, targetLng);
+        const isIndiaGeo = (geo.lat > 6 && geo.lat < 36 && geo.lng > 68 && geo.lng < 97);
+        const isCountryMatch = (country === "IN" && isIndiaGeo) || (country === "US" && !isIndiaGeo);
+
+        if (isCountryMatch) {
+          targetLat = geo.lat;
+          targetLng = geo.lng;
+          resolvedCity = geo.city;
+          console.log("GSM Simulator: Geocoded custom target address successfully:", targetLat, targetLng);
+        } else {
+          isMismatchWarning = true;
+          console.warn(`GSM Simulator: Custom address is in ${isIndiaGeo ? "India" : "the US/another region"}, but target country is ${country === "IN" ? "India" : "US"}. Reverting to telecom area-code triangulation.`);
+        }
       } else {
         console.warn("Could not geocode custom address. Reverting to cellular prefix triangulation.");
       }
@@ -674,6 +697,9 @@ export default function App() {
       `Pinging towers for telephone number (${phoneNumber})...`,
       "Acquiring connection packet logs via Cellular Base Station Controller...",
       "Triangulating local area receiver towers and physical baseband sectors...",
+      isMismatchWarning
+        ? `⚠️ Mismatch detected: Device region is ${country === "US" ? "USA" : "India"} but browser GPS points to another country. Reverting to Telecom Node triangulation.`
+        : `Locking signal coordinates using ${locMode === "live" ? "Browser GPS Node" : locMode === "custom" ? "Custom Address Node" : "Telecom Area Code Node"}...`,
       `Validating registered device ownership matches: ${ownerName}...`,
       "Receiving remote telemetry coordinates... (Handshaking network dBm)",
       "Pinpoint locked! Triangulation complete within ±5 meters."
@@ -686,17 +712,6 @@ export default function App() {
     }
 
     try {
-      const isStaticHost = typeof window !== "undefined" && (
-        window.location.hostname.includes("vercel.app") ||
-        window.location.hostname.includes("github.io") ||
-        window.location.hostname.includes("netlify.app") ||
-        window.location.hostname.includes("pages.dev")
-      );
-
-      if (isStaticHost) {
-        throw new Error("Pure static host environment detected (Vercel). Activating client-side trilateration fallback immediately.");
-      }
-
       const response = await fetch("/api/track-phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -960,17 +975,6 @@ export default function App() {
     setIsChatSending(true);
 
     try {
-      const isStaticHost = typeof window !== "undefined" && (
-        window.location.hostname.includes("vercel.app") ||
-        window.location.hostname.includes("github.io") ||
-        window.location.hostname.includes("netlify.app") ||
-        window.location.hostname.includes("pages.dev")
-      );
-
-      if (isStaticHost) {
-        throw new Error("Pure static host environment detected (Vercel). Activating client-side advice fallback immediately.");
-      }
-
       const response = await fetch("/api/tracker-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
