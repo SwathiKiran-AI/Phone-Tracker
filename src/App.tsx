@@ -408,7 +408,7 @@ export default function App() {
   const [carrier, setCarrier] = useState("Verizon Wireless");
   
   // Custom tracking options for pinpointing state and locations
-  const [locMode, setLocMode] = useState<"live" | "telecom" | "custom">("live");
+  const [locMode, setLocMode] = useState<"live" | "telecom" | "custom">("telecom");
   const [customTargetAddress, setCustomTargetAddress] = useState("");
   
   // Decoys collapse/expand view state
@@ -631,11 +631,9 @@ export default function App() {
         });
         const glat = pos.coords.latitude;
         const glng = pos.coords.longitude;
-        const isIndiaCoords = (glat > 6 && glat < 36 && glng > 68 && glng < 97);
         targetLat = glat;
         targetLng = glng;
         resolvedCity = "Live Browser GPS locked";
-        setCountry(isIndiaCoords ? "IN" : "US");
         console.log("GSM Simulator: Browser live GPS coordinates acquired successfully:", targetLat, targetLng);
       } catch (geoErr) {
         console.warn("Browser GPS permission blocked/timed out. Attempting IP Geolocation fallback...", geoErr);
@@ -646,11 +644,9 @@ export default function App() {
             if (ipData.latitude && ipData.longitude) {
               const iplat = ipData.latitude;
               const iplng = ipData.longitude;
-              const isIndiaIp = (iplat > 6 && iplat < 36 && iplng > 68 && iplng < 97);
               targetLat = iplat;
               targetLng = iplng;
               resolvedCity = `${ipData.city || "Local"}, ${ipData.region || "IP Location"}`;
-              setCountry(isIndiaIp ? "IN" : "US");
               console.log("GSM Simulator: IP Geolocation locked successfully:", targetLat, targetLng);
             }
           }
@@ -661,11 +657,9 @@ export default function App() {
     } else if (locMode === "custom" && customTargetAddress.trim()) {
       const geo = await searchGeocodeAddress(customTargetAddress);
       if (geo) {
-        const isIndiaGeo = (geo.lat > 6 && geo.lat < 36 && geo.lng > 68 && geo.lng < 97);
         targetLat = geo.lat;
         targetLng = geo.lng;
         resolvedCity = geo.city;
-        setCountry(isIndiaGeo ? "IN" : "US");
         console.log("GSM Simulator: Geocoded custom target address successfully:", targetLat, targetLng);
       } else {
         console.warn("Could not geocode custom address. Reverting to cellular prefix triangulation.");
@@ -1297,6 +1291,19 @@ export default function App() {
                     <div className="grid grid-cols-3 gap-2">
                       <button
                         type="button"
+                        onClick={() => setLocMode("telecom")}
+                        className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1.5 focus:outline-none ${
+                          locMode === "telecom"
+                            ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                            : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50"
+                        }`}
+                      >
+                        <Server className="w-4.5 h-4.5" />
+                        <span className="text-[10px] font-bold">Telecom Node</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => setLocMode("live")}
                         className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1.5 focus:outline-none ${
                           locMode === "live"
@@ -1320,24 +1327,11 @@ export default function App() {
                         <Search className="w-4.5 h-4.5" />
                         <span className="text-[10px] font-bold">Custom Place</span>
                       </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setLocMode("telecom")}
-                        className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1.5 focus:outline-none ${
-                          locMode === "telecom"
-                            ? "bg-amber-600 text-white border-amber-600 shadow-xs"
-                            : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50"
-                        }`}
-                      >
-                        <Server className="w-4.5 h-4.5" />
-                        <span className="text-[10px] font-bold">Telecom Node</span>
-                      </button>
                     </div>
 
                     {locMode === "live" && (
-                      <p className="text-[10px] text-amber-800 leading-relaxed font-sans font-medium">
-                        ✨ <strong>Highly Recommended</strong>: Simulates active browser GPS coupling with the target phone number. This automatically locks <strong>your exact physical address, town, and local state</strong> on Google Maps!
+                      <p className="text-[10px] text-zinc-500 leading-relaxed font-sans font-medium">
+                        Simulates tracking using your own active browser/client GPS. Perfect for local sandbox testing to see the locator pinpoint your immediate neighborhood.
                       </p>
                     )}
 
@@ -1359,8 +1353,8 @@ export default function App() {
                     )}
 
                     {locMode === "telecom" && (
-                      <p className="text-[10px] text-zinc-500 leading-normal font-sans">
-                        Uses cellular prefixes and registered telecom area-code nodes (e.g. Dallas, Seattle, Delhi, etc.) to securely simulate triangulation.
+                      <p className="text-[10px] text-amber-800 leading-normal font-sans font-medium">
+                        ✨ <strong>Highly Recommended (Default)</strong>: Securely tracks the phone's true geographic region based on country code and area prefix (e.g. Las Vegas for 702, Bengaluru for 9845).
                       </p>
                     )}
                   </div>
