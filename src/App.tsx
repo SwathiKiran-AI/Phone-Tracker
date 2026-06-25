@@ -30,7 +30,9 @@ import {
   WifiOff,
   PowerOff,
   Globe,
-  ArrowLeft
+  ArrowLeft,
+  Navigation,
+  Search
 } from "lucide-react";
 import { TrackingInfo } from "./types";
 import TrackingMap from "./components/TrackingMap";
@@ -191,7 +193,13 @@ async function getReverseGeocodeClient(lat: number, lng: number, country: string
 // Helper to resolve precise city and coordinates targeting a phone number's country and area code/digits
 export function resolveTargetLocation(phoneNumber: string, country: "US" | "IN"): { city: string; lat: number; lng: number } {
   const digits = phoneNumber.replace(/\D/g, "");
-  const numSeed = digits.split("").reduce((acc, c) => acc + (parseInt(c, 10) || 0), 0);
+  
+  // Use a rolling polynomial hash of the phone number string to ensure different numbers get completely different hashes
+  let hash = 0;
+  for (let i = 0; i < digits.length; i++) {
+    hash = (hash * 31 + digits.charCodeAt(i)) | 0;
+  }
+  const uSeed = Math.abs(hash);
   
   const usCities = [
     { city: "New York City, NY", lat: 40.7128, lng: -74.0060 },
@@ -204,7 +212,11 @@ export function resolveTargetLocation(phoneNumber: string, country: "US" | "IN")
     { city: "Miami, FL", lat: 25.7617, lng: -80.1918 },
     { city: "Boston, MA", lat: 42.3601, lng: -71.0589 },
     { city: "Austin, TX", lat: 30.2672, lng: -97.7431 },
-    { city: "Las Vegas, NV", lat: 36.1716, lng: -115.1398 }
+    { city: "Las Vegas, NV", lat: 36.1716, lng: -115.1398 },
+    { city: "Atlanta, GA", lat: 33.7490, lng: -84.3880 },
+    { city: "Phoenix, AZ", lat: 33.4484, lng: -112.0740 },
+    { city: "Denver, CO", lat: 39.7392, lng: -104.9903 },
+    { city: "Philadelphia, PA", lat: 40.0077, lng: -75.1339 }
   ];
 
   const inCities = [
@@ -219,7 +231,10 @@ export function resolveTargetLocation(phoneNumber: string, country: "US" | "IN")
     { city: "Jaipur, Rajasthan", lat: 26.9124, lng: 75.7873 },
     { city: "Coimbatore, Tamil Nadu", lat: 11.0168, lng: 76.9558 },
     { city: "Lucknow, Uttar Pradesh", lat: 26.8467, lng: 80.9462 },
-    { city: "Kochi, Kerala", lat: 9.9312, lng: 76.2673 }
+    { city: "Kochi, Kerala", lat: 9.9312, lng: 76.2673 },
+    { city: "Chandigarh", lat: 30.7333, lng: 76.7794 },
+    { city: "Indore, Madhya Pradesh", lat: 22.7196, lng: 75.8577 },
+    { city: "Visakhapatnam, Andhra Pradesh", lat: 17.6868, lng: 83.2185 }
   ];
 
   if (country === "US") {
@@ -269,11 +284,12 @@ export function resolveTargetLocation(phoneNumber: string, country: "US" | "IN")
 
     let targetBase = areaCodeMap[areaCode];
     if (!targetBase) {
-      targetBase = usCities[numSeed % usCities.length];
+      // Use the high entropy seed to pick a random city from 15 major US cities, preventing collisions
+      targetBase = usCities[uSeed % usCities.length];
     }
 
-    const latOffset = ((numSeed % 11) * 0.0006) - 0.003;
-    const lngOffset = ((numSeed % 11) * 0.0006) - 0.003;
+    const latOffset = ((uSeed % 11) * 0.0006) - 0.003;
+    const lngOffset = ((uSeed % 13) * 0.0006) - 0.003;
     return {
       city: targetBase.city,
       lat: targetBase.lat + latOffset,
@@ -339,17 +355,45 @@ export function resolveTargetLocation(phoneNumber: string, country: "US" | "IN")
 
     let targetBase = indiaPrefixMap[mobilePrefix];
     if (!targetBase) {
-      targetBase = inCities[numSeed % inCities.length];
+      // Use the high entropy seed to pick a random city from 15 major India cities, preventing collisions
+      targetBase = inCities[uSeed % inCities.length];
     }
 
-    const latOffset = ((numSeed % 11) * 0.0006) - 0.003;
-    const lngOffset = ((numSeed % 11) * 0.0006) - 0.003;
+    const latOffset = ((uSeed % 11) * 0.0006) - 0.003;
+    const lngOffset = ((uSeed % 13) * 0.0006) - 0.003;
     return {
       city: targetBase.city,
       lat: targetBase.lat + latOffset,
       lng: targetBase.lng + lngOffset
     };
   }
+}
+
+// Client-side reverse geocoding lookup helper
+async function searchGeocodeAddress(addressText: string): Promise<{ lat: number; lng: number; city: string } | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addressText)}&format=json&limit=1`,
+      {
+        headers: {
+          "User-Agent": "PhoneTrackerRecoveryApp/2.0 (swathizmail@gmail.com)"
+        }
+      }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.length > 0) {
+        return {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon),
+          city: data[0].display_name || addressText
+        };
+      }
+    }
+  } catch (error) {
+    console.warn("Geocode search failed, falling back to local simulation database:", error);
+  }
+  return null;
 }
 
 export default function App() {
@@ -362,6 +406,10 @@ export default function App() {
   const [emergencyGsm, setEmergencyGsm] = useState(true);
   const [reserveBattery, setReserveBattery] = useState(true);
   const [carrier, setCarrier] = useState("Verizon Wireless");
+  
+  // Custom tracking options for pinpointing state and locations
+  const [locMode, setLocMode] = useState<"live" | "telecom" | "custom">("live");
+  const [customTargetAddress, setCustomTargetAddress] = useState("");
   
   // Decoys collapse/expand view state
   const [showAdvancedDecoys, setShowAdvancedDecoys] = useState(false);
@@ -547,12 +595,56 @@ export default function App() {
     setSearchStep(0);
     setSearchStatusList([]);
 
-    // 1. Resolve high-precision lost phone location strictly based on the entered phone number's telecom registration node and area code
+    // 1. Resolve high-precision lost phone coordinates according to the chosen locator mode
     const resolvedLoc = resolveTargetLocation(phoneNumber, country);
-    const targetLat = resolvedLoc.lat;
-    const targetLng = resolvedLoc.lng;
-    const resolvedCity = resolvedLoc.city;
-    console.log(`GSM Simulator: Localized phone registration node to ${resolvedCity} (${targetLat}, ${targetLng})`);
+    let targetLat = resolvedLoc.lat;
+    let targetLng = resolvedLoc.lng;
+    let resolvedCity = resolvedLoc.city;
+
+    if (locMode === "live") {
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          const options = {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          };
+          navigator.geolocation.getCurrentPosition(resolve, reject, options);
+        });
+        targetLat = pos.coords.latitude;
+        targetLng = pos.coords.longitude;
+        resolvedCity = "Live Browser GPS locked";
+        console.log("GSM Simulator: Browser live GPS coordinates acquired:", targetLat, targetLng);
+      } catch (geoErr) {
+        console.warn("Browser GPS permission blocked/timed out. Attempting IP Geolocation fallback...", geoErr);
+        try {
+          const ipRes = await fetch("https://ipapi.co/json/");
+          if (ipRes.ok) {
+            const ipData = await ipRes.json();
+            if (ipData.latitude && ipData.longitude) {
+              targetLat = ipData.latitude;
+              targetLng = ipData.longitude;
+              resolvedCity = `${ipData.city || "Local"}, ${ipData.region || "IP Location"}`;
+              console.log("GSM Simulator: IP Geolocation locked successfully:", targetLat, targetLng);
+            }
+          }
+        } catch (ipErr) {
+          console.warn("IP Geolocation fallback failed. Reverting to cellular prefix triangulation.", ipErr);
+        }
+      }
+    } else if (locMode === "custom" && customTargetAddress.trim()) {
+      const geo = await searchGeocodeAddress(customTargetAddress);
+      if (geo) {
+        targetLat = geo.lat;
+        targetLng = geo.lng;
+        resolvedCity = geo.city;
+        console.log("GSM Simulator: Geocoded custom target address successfully:", targetLat, targetLng);
+      } else {
+        console.warn("Could not geocode custom address. Reverting to cellular prefix triangulation.");
+      }
+    }
+
+    console.log(`GSM Simulator: Target tracking base point resolved to ${resolvedCity} (${targetLat}, ${targetLng})`);
 
     // Custom multi-phase console output steps to display tracker progress
     const steps = [
@@ -1137,6 +1229,84 @@ export default function App() {
                         className="w-full bg-zinc-50 border border-zinc-250 focus:bg-white focus:border-amber-500/50 rounded-xl pl-10 pr-4 py-2.5 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none transition font-mono font-semibold"
                       />
                     </div>
+                  </div>
+
+                  {/* Target Locator Mode Options */}
+                  <div className="bg-amber-50/55 border border-amber-200/70 p-4 rounded-2xl space-y-3">
+                    <label className="text-xs font-bold text-amber-900 block font-mono uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-amber-600 animate-pulse" />
+                      <span>GPS / Location Target Configuration</span>
+                    </label>
+                    
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLocMode("live")}
+                        className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1.5 focus:outline-none ${
+                          locMode === "live"
+                            ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                            : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50"
+                        }`}
+                      >
+                        <Navigation className="w-4.5 h-4.5" />
+                        <span className="text-[10px] font-bold">Live GPS Link</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setLocMode("custom")}
+                        className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1.5 focus:outline-none ${
+                          locMode === "custom"
+                            ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                            : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50"
+                        }`}
+                      >
+                        <Search className="w-4.5 h-4.5" />
+                        <span className="text-[10px] font-bold">Custom Place</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setLocMode("telecom")}
+                        className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1.5 focus:outline-none ${
+                          locMode === "telecom"
+                            ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                            : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50"
+                        }`}
+                      >
+                        <Server className="w-4.5 h-4.5" />
+                        <span className="text-[10px] font-bold">Telecom Node</span>
+                      </button>
+                    </div>
+
+                    {locMode === "live" && (
+                      <p className="text-[10px] text-amber-800 leading-relaxed font-sans font-medium">
+                        ✨ <strong>Highly Recommended</strong>: Simulates active browser GPS coupling with the target phone number. This automatically locks <strong>your exact physical address, town, and local state</strong> on Google Maps!
+                      </p>
+                    )}
+
+                    {locMode === "custom" && (
+                      <div className="space-y-1.5 pt-1">
+                        <label className="text-[10px] font-bold text-zinc-650 font-mono uppercase tracking-wider block">Enter Target Location or Address</label>
+                        <input
+                          type="text"
+                          required={locMode === "custom"}
+                          placeholder="e.g. California, USA or Bangalore, Karnataka"
+                          value={customTargetAddress}
+                          onChange={(e) => setCustomTargetAddress(e.target.value)}
+                          className="w-full bg-white border border-zinc-250 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none transition font-sans font-medium"
+                        />
+                        <p className="text-[9px] text-zinc-500 font-sans leading-normal">
+                          Type any custom city, state, or precise street address. FinderGate will geocode and pinpoint this location exactly on the active maps.
+                        </p>
+                      </div>
+                    )}
+
+                    {locMode === "telecom" && (
+                      <p className="text-[10px] text-zinc-500 leading-normal font-sans">
+                        Uses cellular prefixes and registered telecom area-code nodes (e.g. Dallas, Seattle, Delhi, etc.) to securely simulate triangulation.
+                      </p>
+                    )}
                   </div>
 
                   {/* ADVANCED OFFLINE & POWERED DOWN PROTOCOLS (Collapsible / Hidden by default as requested) */}
