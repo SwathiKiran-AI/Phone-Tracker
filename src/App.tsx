@@ -664,6 +664,17 @@ export default function App() {
     }
 
     try {
+      const isStaticHost = typeof window !== "undefined" && (
+        window.location.hostname.includes("vercel.app") ||
+        window.location.hostname.includes("github.io") ||
+        window.location.hostname.includes("netlify.app") ||
+        window.location.hostname.includes("pages.dev")
+      );
+
+      if (isStaticHost) {
+        throw new Error("Pure static host environment detected (Vercel). Activating client-side trilateration fallback immediately.");
+      }
+
       const response = await fetch("/api/track-phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -927,6 +938,17 @@ export default function App() {
     setIsChatSending(true);
 
     try {
+      const isStaticHost = typeof window !== "undefined" && (
+        window.location.hostname.includes("vercel.app") ||
+        window.location.hostname.includes("github.io") ||
+        window.location.hostname.includes("netlify.app") ||
+        window.location.hostname.includes("pages.dev")
+      );
+
+      if (isStaticHost) {
+        throw new Error("Pure static host environment detected (Vercel). Activating client-side advice fallback immediately.");
+      }
+
       const response = await fetch("/api/tracker-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
