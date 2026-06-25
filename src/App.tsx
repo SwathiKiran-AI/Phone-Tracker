@@ -188,6 +188,7 @@ export default function App() {
   
   // Decoys collapse/expand view state
   const [showAdvancedDecoys, setShowAdvancedDecoys] = useState(false);
+  const [showHardwareCommands, setShowHardwareCommands] = useState(false);
 
   // Sync carrier and device model selections dynamically
   useEffect(() => {
@@ -388,15 +389,14 @@ export default function App() {
         const glat = pos.coords.latitude;
         const glng = pos.coords.longitude;
         const isIndiaCoords = (glat > 6 && glat < 36 && glng > 68 && glng < 97);
-        if (isIndiaCoords) {
-          setCountry("IN");
+        if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
+          targetLat = glat;
+          targetLng = glng;
+          resolvedCity = "Browser GPS locked";
+          console.log("GSM Simulator: Browser live physical GPS locked successfully:", targetLat, targetLng);
         } else {
-          setCountry("US");
+          console.log("GSM Simulator: Browser GPS is in another region, using regional simulator coordinates for selected country.");
         }
-        targetLat = glat;
-        targetLng = glng;
-        resolvedCity = "Browser GPS locked";
-        console.log("GSM Simulator: Browser live physical GPS locked successfully:", targetLat, targetLng);
       }
     } catch (geowarn) {
       console.warn("GSM Simulator: Browser GPS unavailable or denied, shifting to IP Geolocation database lookup:", geowarn);
@@ -412,15 +412,14 @@ export default function App() {
             const ilat = Number(ipData.latitude);
             const ilng = Number(ipData.longitude);
             const isIndiaCoords = (ilat > 6 && ilat < 36 && ilng > 68 && ilng < 97);
-            if (isIndiaCoords) {
-              setCountry("IN");
+            if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
+              targetLat = ilat;
+              targetLng = ilng;
+              resolvedCity = ipData.city || "Network Node Area";
+              console.log("GSM Simulator: IP Geolocation resolved regional coordinates:", targetLat, targetLng);
             } else {
-              setCountry("US");
+              console.log("GSM Simulator: IP Geolocation is in another region, skipping override.");
             }
-            targetLat = ilat;
-            targetLng = ilng;
-            resolvedCity = ipData.city || "Network Node Area";
-            console.log("GSM Simulator: IP Geolocation resolved regional coordinates:", targetLat, targetLng);
           }
         }
       } catch (ipErr) {
@@ -433,15 +432,14 @@ export default function App() {
               const ilat = Number(backupData.latitude);
               const ilng = Number(backupData.longitude);
               const isIndiaCoords = (ilat > 6 && ilat < 36 && ilng > 68 && ilng < 97);
-              if (isIndiaCoords) {
-                setCountry("IN");
+              if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
+                targetLat = ilat;
+                targetLng = ilng;
+                resolvedCity = backupData.cityName || "Network Node Area Backup";
+                console.log("GSM Simulator: Backup IP Geolocation resolved coordinates:", targetLat, targetLng);
               } else {
-                setCountry("US");
+                console.log("GSM Simulator: Backup IP Geolocation is in another region, skipping override.");
               }
-              targetLat = ilat;
-              targetLng = ilng;
-              resolvedCity = backupData.cityName || "Network Node Area Backup";
-              console.log("GSM Simulator: Backup IP Geolocation resolved coordinates:", targetLat, targetLng);
             }
           }
         } catch (backupErr) {
@@ -489,7 +487,9 @@ export default function App() {
           deviceModel: deviceModelInput, 
           country,
           targetLat,
-          targetLng
+          targetLng,
+          clientLat: targetLat,
+          clientLng: targetLng
         }),
       });
 
@@ -1220,32 +1220,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Status parameters list */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="bg-slate-50 border border-zinc-200 p-2.5 rounded-xl flex items-center space-x-2">
-                  <WifiOff className="w-4 h-4 text-rose-500 animate-pulse" />
-                  <div className="text-[10px] font-mono leading-tight">
-                    <span className="text-zinc-500 block uppercase">Offline Feed</span>
-                    <span className="text-rose-700 font-bold uppercase">Mesh+GSM+UWB Active</span>
-                  </div>
-                </div>
 
-                <div className="bg-slate-50 border border-zinc-200 p-2.5 rounded-xl flex items-center space-x-2">
-                  <Signal className="w-4 h-4 text-emerald-600 animate-pulse" />
-                  <div className="text-[10px] font-mono leading-tight">
-                    <span className="text-zinc-500 block uppercase">Signal Feed</span>
-                    <span className="text-zinc-800 font-bold">{trackingInfo.telemetry.networkStrengthDbm} dBm (Good)</span>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 border border-zinc-200 p-2.5 rounded-xl flex items-center space-x-2">
-                  <Battery className="w-4 h-4 text-amber-500" />
-                  <div className="text-[10px] font-mono leading-tight">
-                    <span className="text-zinc-500 block uppercase">Device Charge</span>
-                    <span className="text-zinc-800 font-bold">{trackingInfo.telemetry.batteryLevel}% ({trackingInfo.telemetry.batteryState})</span>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Main Interactive Grid */}
@@ -1294,53 +1269,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Telemetry data info blocks */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                  {/* Device Model (Spec) */}
-                  <div className="bg-white border border-zinc-200 p-3.5 rounded-xl space-y-1 flex flex-col justify-between shadow-xs">
-                    <span className="text-[9px] text-zinc-500 block font-mono font-semibold uppercase tracking-wider">DEVICE MODEL</span>
-                    <div className="flex items-center space-x-1.5">
-                      <Smartphone className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                      <p className="text-xs font-bold text-zinc-800 truncate">{trackingInfo.telemetry.deviceModel || "iPhone 15 Pro Max"}</p>
-                    </div>
-                  </div>
 
-                  {/* Carrier */}
-                  <div className="bg-white border border-zinc-200 p-3.5 rounded-xl space-y-1 flex flex-col justify-between shadow-xs">
-                    <span className="text-[9px] text-zinc-500 block font-mono font-semibold uppercase tracking-wider">CARRIER PROVIDER</span>
-                    <div className="flex items-center space-x-1.5">
-                      <Signal className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                      <p className="text-xs font-bold text-zinc-800 truncate">{trackingInfo.telemetry.carrier}</p>
-                    </div>
-                  </div>
-
-                  {/* Connection */}
-                  <div className="bg-white border border-zinc-200 p-3.5 rounded-xl space-y-1 flex flex-col justify-between shadow-xs">
-                    <span className="text-[9px] text-zinc-500 block font-mono font-semibold uppercase tracking-wider">CONNECTION LINK</span>
-                    <div className="flex items-center space-x-1.5">
-                      <Compass className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                      <p className="text-xs font-bold text-zinc-800 truncate">{trackingInfo.telemetry.connectionType}</p>
-                    </div>
-                  </div>
-
-                  {/* Temp */}
-                  <div className="bg-white border border-zinc-200 p-3.5 rounded-xl space-y-1 flex flex-col justify-between shadow-xs">
-                    <span className="text-[9px] text-zinc-500 block font-mono font-semibold uppercase tracking-wider">TEMP LEVEL</span>
-                    <div className="flex items-center space-x-1.5">
-                      <Activity className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                      <p className="text-xs font-bold text-zinc-800 truncate">{trackingInfo.telemetry.tempCelsius} °C (Normal)</p>
-                    </div>
-                  </div>
-
-                  {/* IMEI serial */}
-                  <div className="bg-white border border-zinc-200 p-3.5 rounded-xl space-y-1 flex flex-col justify-between shadow-xs">
-                    <span className="text-[9px] text-zinc-500 block font-mono font-semibold uppercase tracking-wider">IMEI IDENTIFICATION</span>
-                    <div className="flex items-center space-x-1.5">
-                      <Fingerprint className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                      <p className="text-[10px] font-mono font-bold text-zinc-800 truncate">{trackingInfo.telemetry.imei}</p>
-                    </div>
-                  </div>
-                </div>
 
               </div>
 
@@ -1348,138 +1277,150 @@ export default function App() {
               <div className="lg:col-span-4 space-y-6">
                        {/* Safeguards / Remote controls panel */}
                 <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4 shadow-xs">
-                  <span className="text-xs font-semibold text-zinc-650 font-mono flex items-center space-x-1.5">
-                    <Terminal className="w-4 h-4 text-amber-600 animate-pulse" />
-                    <span>Remote Hardware Commands</span>
-                  </span>
+                  <button
+                    onClick={() => setShowHardwareCommands(!showHardwareCommands)}
+                    className="w-full flex items-center justify-between text-xs font-semibold text-zinc-650 font-mono hover:text-amber-600 transition focus:outline-hidden"
+                  >
+                    <span className="flex items-center space-x-1.5">
+                      <Terminal className="w-4 h-4 text-amber-600 animate-pulse" />
+                      <span>Remote Hardware Commands</span>
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-md">
+                      {showHardwareCommands ? "Hide" : "Show"}
+                    </span>
+                  </button>
 
-                  {isDeviceWiped ? (
-                    <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center space-x-2.5">
-                      <ShieldAlert className="w-5 h-5 flex-shrink-0 text-rose-500" />
-                      <span>Remote wipe command already run. Hardware controls unlinked.</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      
-                      {/* Alarm Speaker controller */}
-                      <div className="border border-zinc-200 bg-slate-50/50 rounded-xl p-3.5 flex flex-col space-y-3 shadow-2xs">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-0.5">
-                            <span className="text-[11px] font-bold text-zinc-800">Play Ringtone / Sound</span>
-                            <p className="text-[10px] text-zinc-500 leading-relaxed">Runs acoustic frequency beep to locate nearby</p>
-                          </div>
-                          <Volume2 className={`w-4 h-4 ${isAlarmPlaying ? "text-amber-500 animate-ping" : "text-zinc-400"}`} />
+                  {showHardwareCommands && (
+                    <>
+                      {isDeviceWiped ? (
+                        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center space-x-2.5">
+                          <ShieldAlert className="w-5 h-5 flex-shrink-0 text-rose-500" />
+                          <span>Remote wipe command already run. Hardware controls unlinked.</span>
                         </div>
-
-                        {isAlarmPlaying ? (
-                          <button
-                            id="stop-alarm-btn"
-                            onClick={stopAlarmSound}
-                            className="w-full py-1.5 px-3 bg-rose-600 hover:bg-rose-750 text-white text-xs font-semibold rounded-lg transition shadow-xs"
-                          >
-                            Stop Alarm Sound
-                          </button>
-                        ) : (
-                          <button
-                            id="start-alarm-btn"
-                            onClick={startAlarmSound}
-                            className="w-full py-1.5 px-3 bg-white hover:bg-zinc-50 border border-zinc-200 text-amber-600 text-xs font-semibold rounded-lg transition"
-                          >
-                            Trigger Audible Beep
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Device Locking controller */}
-                      <div className="border border-zinc-200 bg-slate-50/50 rounded-xl p-3.5 flex flex-col space-y-3 shadow-2xs">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-0.5">
-                            <span className="text-[11px] font-bold text-zinc-800">Remote Screen Lock</span>
-                            <p className="text-[10px] text-zinc-500 leading-relaxed">Secure lost device display with dynamic custom PIN code</p>
-                          </div>
-                          <Lock className={`w-4 h-4 ${isDeviceLocked ? "text-emerald-500" : "text-zinc-400"}`} />
-                        </div>
-
-                        {isDeviceLocked ? (
-                          <div className="p-2.5 bg-emerald-50 border border-emerald-250 text-emerald-700 text-xs rounded-xl text-center font-semibold uppercase font-mono tracking-wider">
-                            Device Locked Safely
-                          </div>
-                        ) : (
-                          <button
-                            id="open-lock-btn"
-                            onClick={() => setIsLockModalOpen(true)}
-                            className="w-full py-1.5 px-3 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 text-xs font-semibold rounded-lg transition"
-                          >
-                            Configure Lock Screen
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Hard Reset Safe Wipe controller */}
-                      <div className="border border-zinc-200 bg-slate-50/50 rounded-xl p-3.5 flex flex-col space-y-3 shadow-2xs">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-0.5">
-                            <span className="text-[11px] font-bold text-rose-600">Permanent Factory Wipe</span>
-                            <p className="text-[10px] text-zinc-500 leading-relaxed">Erase credentials, wallets, accounts to protect data privacy</p>
-                          </div>
-                          <ShieldAlert className="w-4 h-4 text-rose-500" />
-                        </div>
-
-                        <button
-                          id="open-wipe-btn"
-                          onClick={() => setIsWipeModalOpen(true)}
-                          className="w-full py-1.5 px-3 bg-rose-50 hover:bg-rose-100/60 border border-rose-200 text-rose-600 text-xs font-semibold rounded-lg transition"
-                        >
-                          Erase Device Memory
-                        </button>
-                      </div>
-
-                      {/* Anti-Theft App Uninstallation Protection */}
-                      <div className="border border-zinc-200 bg-slate-50/50 rounded-xl p-3.5 flex flex-col space-y-3 shadow-2xs">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-0.5">
-                            <span className="text-[11px] font-bold text-zinc-800">Uninstall Password Security</span>
-                            <p className="text-[10px] text-zinc-500 leading-relaxed">Prevent unauthorized removal of the locator app on client hardware</p>
-                          </div>
-                          <Fingerprint className="w-4 h-4 text-emerald-500" />
-                        </div>
-
-                        <div className="flex items-center justify-between text-xs font-mono bg-zinc-150/70 p-2 rounded-lg border border-zinc-200">
-                          <span className="text-zinc-650 font-sans">Protection status:</span>
-                          <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
-                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                            ACTIVE LOCK
-                          </span>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <button
-                            id="simulate-uninstall-attempt-btn"
-                            onClick={() => {
-                               setIsUninstallModalOpen(true);
-                               setUninstallInputPassword("");
-                               setUninstallStatusMessage(null);
-                            }}
-                            className="flex-1 py-1.5 px-2 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 text-[11.5px] font-semibold rounded-lg transition"
-                          >
-                            Simulate Target Uninstall
-                          </button>
+                      ) : (
+                        <div className="space-y-3">
                           
-                          <button
-                            id="change-uninstall-pwd-btn"
-                            onClick={() => {
-                               setIsPasswordConfigModalOpen(true);
-                               setPasswordConfigInput(uninstallPassword);
-                            }}
-                            className="py-1.5 px-3 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-500 rounded-lg transition flex items-center justify-center"
-                            title="Configure Security Key"
-                          >
-                            <Lock className="w-3.5 h-3.5 text-amber-500" />
-                          </button>
-                        </div>
-                      </div>
+                          {/* Alarm Speaker controller */}
+                          <div className="border border-zinc-200 bg-slate-50/50 rounded-xl p-3.5 flex flex-col space-y-3 shadow-2xs">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-0.5">
+                                <span className="text-[11px] font-bold text-zinc-800">Play Ringtone / Sound</span>
+                                <p className="text-[10px] text-zinc-500 leading-relaxed">Runs acoustic frequency beep to locate nearby</p>
+                              </div>
+                              <Volume2 className={`w-4 h-4 ${isAlarmPlaying ? "text-amber-500 animate-ping" : "text-zinc-400"}`} />
+                            </div>
 
-                    </div>
+                            {isAlarmPlaying ? (
+                              <button
+                                id="stop-alarm-btn"
+                                onClick={stopAlarmSound}
+                                className="w-full py-1.5 px-3 bg-rose-600 hover:bg-rose-750 text-white text-xs font-semibold rounded-lg transition shadow-xs"
+                              >
+                                Stop Alarm Sound
+                              </button>
+                            ) : (
+                              <button
+                                id="start-alarm-btn"
+                                onClick={startAlarmSound}
+                                className="w-full py-1.5 px-3 bg-white hover:bg-zinc-50 border border-zinc-200 text-amber-600 text-xs font-semibold rounded-lg transition"
+                              >
+                                Trigger Audible Beep
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Device Locking controller */}
+                          <div className="border border-zinc-200 bg-slate-50/50 rounded-xl p-3.5 flex flex-col space-y-3 shadow-2xs">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-0.5">
+                                <span className="text-[11px] font-bold text-zinc-800">Remote Screen Lock</span>
+                                <p className="text-[10px] text-zinc-500 leading-relaxed">Secure lost device display with dynamic custom PIN code</p>
+                              </div>
+                              <Lock className={`w-4 h-4 ${isDeviceLocked ? "text-emerald-500" : "text-zinc-400"}`} />
+                            </div>
+
+                            {isDeviceLocked ? (
+                              <div className="p-2.5 bg-emerald-50 border border-emerald-250 text-emerald-700 text-xs rounded-xl text-center font-semibold uppercase font-mono tracking-wider">
+                                Device Locked Safely
+                              </div>
+                            ) : (
+                              <button
+                                id="open-lock-btn"
+                                onClick={() => setIsLockModalOpen(true)}
+                                className="w-full py-1.5 px-3 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 text-xs font-semibold rounded-lg transition"
+                              >
+                                Configure Lock Screen
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Hard Reset Safe Wipe controller */}
+                          <div className="border border-zinc-200 bg-slate-50/50 rounded-xl p-3.5 flex flex-col space-y-3 shadow-2xs">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-0.5">
+                                <span className="text-[11px] font-bold text-rose-600">Permanent Factory Wipe</span>
+                                <p className="text-[10px] text-zinc-500 leading-relaxed">Erase credentials, wallets, accounts to protect data privacy</p>
+                              </div>
+                              <ShieldAlert className="w-4 h-4 text-rose-500" />
+                            </div>
+
+                            <button
+                              id="open-wipe-btn"
+                              onClick={() => setIsWipeModalOpen(true)}
+                              className="w-full py-1.5 px-3 bg-rose-50 hover:bg-rose-100/60 border border-rose-200 text-rose-600 text-xs font-semibold rounded-lg transition"
+                            >
+                              Erase Device Memory
+                            </button>
+                          </div>
+
+                          {/* Anti-Theft App Uninstallation Protection */}
+                          <div className="border border-zinc-200 bg-slate-50/50 rounded-xl p-3.5 flex flex-col space-y-3 shadow-2xs">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-0.5">
+                                <span className="text-[11px] font-bold text-zinc-800">Uninstall Password Security</span>
+                                <p className="text-[10px] text-zinc-500 leading-relaxed">Prevent unauthorized removal of the locator app on client hardware</p>
+                              </div>
+                              <Fingerprint className="w-4 h-4 text-emerald-500" />
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs font-mono bg-zinc-150/70 p-2 rounded-lg border border-zinc-200">
+                              <span className="text-zinc-650 font-sans">Protection status:</span>
+                              <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                                ACTIVE LOCK
+                              </span>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <button
+                                id="simulate-uninstall-attempt-btn"
+                                onClick={() => {
+                                   setIsUninstallModalOpen(true);
+                                   setUninstallInputPassword("");
+                                   setUninstallStatusMessage(null);
+                                }}
+                                className="flex-1 py-1.5 px-2 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 text-[11.5px] font-semibold rounded-lg transition"
+                              >
+                                Simulate Target Uninstall
+                              </button>
+                              
+                              <button
+                                id="change-uninstall-pwd-btn"
+                                onClick={() => {
+                                   setIsPasswordConfigModalOpen(true);
+                                   setPasswordConfigInput(uninstallPassword);
+                                }}
+                                className="py-1.5 px-3 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-500 rounded-lg transition flex items-center justify-center"
+                                title="Configure Security Key"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-amber-500" />
+                              </button>
+                            </div>
+                          </div>
+
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 

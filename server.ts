@@ -157,13 +157,16 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
 // API Endpoints
 app.post("/api/track-phone", async (req, res) => {
   try {
-    const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel, country = "US", clientLat, clientLng, targetLat, targetLng } = req.body || {};
+    const { phoneNumber, ownerName, carrier, deviceModel: customDeviceModel, country = "US", clientLat: reqClientLat, clientLng: reqClientLng, targetLat, targetLng } = req.body || {};
 
     if (!phoneNumber || !ownerName) {
       return res.status(400).json({ error: "Phone number and owner name are required values." });
     }
 
     const numSeed = phoneNumber.split("").reduce((acc: number, char: string) => acc + (parseInt(char, 10) || 0), 0);
+
+    const clientLat = targetLat !== undefined ? targetLat : reqClientLat;
+    const clientLng = targetLng !== undefined ? targetLng : reqClientLng;
 
     // Default base coordinates
     let baseLat = country === "IN" ? 12.9716 : 33.9237;
@@ -173,6 +176,22 @@ app.post("/api/track-phone", async (req, res) => {
     let resolvedCarrier = carrier;
     let resolvedDeviceModel = customDeviceModel;
     let isUsingClientLoc = false;
+
+    // 1. Check if client-detected coordinate matches country selection OR is provided.
+    // If we have precise client location, set it immediately as our primary base.
+    if (clientLat != null && clientLng != null && !isNaN(Number(clientLat)) && !isNaN(Number(clientLng))) {
+      baseLat = Number(clientLat);
+      baseLng = Number(clientLng);
+      isUsingClientLoc = true;
+    } else if (country === "IN") {
+      baseLat = 12.9716;
+      baseLng = 77.5946;
+      resolvedCity = "Bengaluru, Karnataka";
+    } else {
+      baseLat = 33.9237;
+      baseLng = -84.8408;
+      resolvedCity = "Dallas, Georgia";
+    }
 
     // Call Gemini to geolocate the phone number's true region and form a matching highly realistic address
     if (process.env.GEMINI_API_KEY) {
@@ -185,10 +204,10 @@ Selected Country Code: ${country} (US=United States, IN=India)
 Client-detected GPS/IP Coordinates (if any): Lat ${clientLat || "N/A"}, Lng ${clientLng || "N/A"}.
 
 Your absolute mandate is to resolve this to the most authentic, exact physical address:
-1. If the user is testing the app on their local device (indicated by a provided Client-detected GPS/IP Lat/Lng that falls within the target country), prioritize this exact coordinates (Lat ${clientLat}, Lng ${clientLng}) and geocode/identify its true local city, state, or county (such as Dallas, Georgia or Bengaluru, Karnataka) to give them their immediate actual physical address!
-2. If no Client-detected GPS/IP is provided or it doesn't match the selected country, analyze the phone number's area code or prefix series:
-   - For USA area codes: e.g. 770, 678, 470, 706 belong to Georgia, USA (Dallas, GA / Atlanta, GA). If it contains these area codes, you MUST localize the node precisely inside Dallas, GA area (latitude: 33.9237, longitude: -84.8408).
-   - Other USA area codes: e.g. 212/646/917 (New York, NY), 415/628 (San Francisco, CA), 310/213 (Los Angeles, CA), etc. Map them to their true physical city and state.
+1. If Client-detected GPS/IP Coordinates are provided (not N/A), you MUST return these exact coordinates in the 'latitude' and 'longitude' fields without any rounding or modification, and then reverse-geocode them to get the exact physical street address matching those coordinates!
+2. If no Client-detected GPS/IP is provided, analyze the phone number's area code or prefix series to determine its geographic location:
+   - For USA area codes: e.g. 770, 678, 470, 706 belong to Georgia, USA (Dallas, GA / Atlanta, GA). If it contains these area codes, localize precisely inside Dallas, GA area (latitude: 33.9237, longitude: -84.8408).
+   - Other USA area codes: e.g. 212/646/917 (New York, NY), 415/628 (San Francisco, CA), 310/213 (Los Angeles, CA), etc. Map them to their true physical city, state, and coordinate.
    - For Indian numbers: Look up the mobile series telecom circle (e.g., 9845/9448 series is Karnataka (Bangalore), 9820/9819 is Mumbai, 9810 is Delhi, 9830 is West Bengal, etc.) and map it accurately to that region.
 3. Formulate a highly specific, genuine-looking, complete and localized physical street address (with correct street names, subdivisions, city, state, zip/postal code) that matches these coordinates. Do not return mock values or placeholders.
 
@@ -219,13 +238,15 @@ Provide the response in the required JSON structure.
         if (geminiResponse.text) {
           const result = JSON.parse(geminiResponse.text.trim());
           if (result.latitude && result.longitude) {
-            baseLat = Number(result.latitude);
-            baseLng = Number(result.longitude);
+            // ONLY let Gemini overwrite coordinates if we didn't have high-precision user GPS/IP coordinates
+            if (!isUsingClientLoc) {
+              baseLat = Number(result.latitude);
+              baseLng = Number(result.longitude);
+            }
             resolvedCity = result.city;
             resolvedAddress = result.address;
             if (!resolvedCarrier) resolvedCarrier = result.carrier;
             if (!resolvedDeviceModel) resolvedDeviceModel = result.deviceModel;
-            isUsingClientLoc = true;
             console.log(`GSM Simulator: Gemini resolved phone mapping to ${resolvedCity} (${baseLat}, ${baseLng}) - Address: ${resolvedAddress}`);
           }
         }
@@ -234,52 +255,20 @@ Provide the response in the required JSON structure.
       }
     }
 
-    // Traditional lookup / validation fallback if Gemini is unconfigured or fails
-    if (!resolvedAddress) {
-      if (targetLat != null && targetLng != null && !isNaN(Number(targetLat)) && !isNaN(Number(targetLng))) {
-        baseLat = Number(targetLat);
-        baseLng = Number(targetLng);
-        isUsingClientLoc = true;
-      } else if (clientLat != null && clientLng != null && !isNaN(Number(clientLat)) && !isNaN(Number(clientLng))) {
-        const cLat = Number(clientLat);
-        const cLng = Number(clientLng);
-        const isClientInIndia = (cLat > 6 && cLat < 36 && cLng > 68 && cLng < 97);
-        if ((country === "IN" && isClientInIndia) || (country === "US" && !isClientInIndia)) {
-          baseLat = cLat;
-          baseLng = cLng;
-          isUsingClientLoc = true;
-        } else {
-          // If the client coordinate is in the wrong country for the search, default to the right country coordinates
-          if (country === "IN") {
-            baseLat = 12.9716;
-            baseLng = 77.5946;
-          } else {
-            baseLat = 33.9237;
-            baseLng = -84.8408;
-            resolvedCity = "Dallas, Georgia";
-          }
-        }
-      } else if (country === "IN") {
-        baseLat = 12.9716;
-        baseLng = 77.5946;
-      } else {
-        // Default to Dallas, Georgia for any other US number
-        baseLat = 33.9237;
-        baseLng = -84.8408;
-        resolvedCity = "Dallas, Georgia";
-      }
-    }
-
     // Precise coordinates offset simulation to represent live-tracking precision lock (keeping it adjacent)
-    const offsetFactor = isUsingClientLoc ? 0.00012 : 0.0004;
-    const offsetSub = isUsingClientLoc ? -0.0002 : -0.0006;
+    // Avoid offsetting when using precise client-detected location, or keep offset microscopic so it's exact!
+    const offsetFactor = isUsingClientLoc ? 0.00001 : 0.0004;
+    const offsetSub = isUsingClientLoc ? 0.0 : -0.0006;
 
     const finalLat = baseLat + ((numSeed % 5) * offsetFactor) + offsetSub;
     const finalLng = baseLng + ((numSeed % 5) * offsetFactor) + offsetSub;
 
-    // Use reverse geocoder to retrieve exact administrative OSM address for coordinates (ignoring any potential Gemini mixed strings for absolute layout safety)
-    const currentAddress = await getReverseGeocode(finalLat, finalLng, country, false, numSeed);
-    
+    // Retrieve address. If Gemini returned a precise resolvedAddress, prioritize it. Otherwise, use Osm reverse geocoder
+    let currentAddress = resolvedAddress;
+    if (!currentAddress) {
+      currentAddress = await getReverseGeocode(finalLat, finalLng, country, false, numSeed);
+    }
+
     const hist1Address = await getReverseGeocode(finalLat + 0.0016, finalLng - 0.0014, country, true, numSeed + 1);
     const hist2Address = await getReverseGeocode(finalLat - 0.0024, finalLng + 0.0022, country, true, numSeed + 2);
     const hist3Address = await getReverseGeocode(finalLat + 0.0005, finalLng + 0.0003, country, true, numSeed + 3);
