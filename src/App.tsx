@@ -399,7 +399,7 @@ async function searchGeocodeAddress(addressText: string): Promise<{ lat: number;
 export default function App() {
   // Input fields for tracking initiation
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [ownerName, setOwnerName] = useState("");
+  const [ownerName, setOwnerName] = useState("Tracked Device");
   const [deviceModelInput, setDeviceModelInput] = useState("iPhone 15 Pro Max");
   const [country, setCountry] = useState<"US" | "IN">("US");
   const [offlineMesh, setOfflineMesh] = useState(true);
@@ -603,8 +603,8 @@ export default function App() {
 
   const handleStartTracking = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!phoneNumber || !ownerName) {
-      setError("Please fill in both the Lost phone number and the owner's legal name.");
+    if (!phoneNumber) {
+      setError("Please fill in the target phone number.");
       return;
     }
 
@@ -1109,28 +1109,10 @@ export default function App() {
                 Phone tracker <span className="bg-amber-500/15 text-amber-750 border border-amber-500/20 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold">Global Link v2.6</span>
               </h1>
               <p className="text-[10px] text-zinc-500 font-medium tracking-wide flex items-center space-x-1 uppercase">
-                <span>Decentralized GPS Offline Locator</span>
+                <span>Decentralized GPS Locator</span>
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               </p>
             </div>
-          </div>
-
-          <div className="flex items-center space-x-4">
-            <div className="hidden sm:flex items-center space-x-2 text-[10px] font-mono text-zinc-650 bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg font-semibold">
-              <Server className="w-3.5 h-3.5 text-zinc-500" />
-              <span>Proxy Status: Secure TLS</span>
-            </div>
-
-            {trackingInfo && (
-              <button
-                id="quit-tracking-btn"
-                onClick={handleOpenDisconnectModal}
-                className="flex items-center space-x-1.5 text-xs text-rose-600 hover:text-rose-700 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-[11px] transition"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Disconnect Agent</span>
-              </button>
-            )}
           </div>
         </div>
       </header>
@@ -1169,30 +1151,6 @@ export default function App() {
                   <li>Gemini Assistant recovery advice integrated</li>
                 </ul>
               </div>
-
-              {/* Saved tracking history shortcuts */}
-              {searchHistory.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-zinc-600 flex items-center space-x-1">
-                    <History className="w-3.5 h-3.5 text-zinc-550" />
-                    <span>Recent Tracked Searches</span>
-                  </p>
-                  <div className="flex flex-col gap-1.5">
-                    {searchHistory.map((hist, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => reloadFromHistory(hist)}
-                        className="w-full text-left p-2.5 bg-white hover:bg-zinc-100 border border-zinc-200 rounded-xl flex items-center justify-between text-xs text-zinc-700 hover:text-zinc-900 transition"
-                      >
-                        <span className="truncate font-semibold text-zinc-800">
-                          {hist.owner} ({hist.number})
-                        </span>
-                        <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Input Form Card */}
@@ -1216,39 +1174,20 @@ export default function App() {
                     </div>
                   )}
                                   {/* Target Location / Country Region Selector */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-650 block font-mono uppercase tracking-wider flex items-center gap-1">
-                        <Globe className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Target Region</span>
-                      </label>
-                      <select
-                        id="country-select"
-                        value={country}
-                        onChange={(e) => setCountry(e.target.value as "US" | "IN")}
-                        className="w-full bg-zinc-50 border border-zinc-250 focus:bg-white focus:border-amber-500/50 rounded-xl px-3 py-2.5 text-xs text-zinc-800 focus:outline-none transition font-sans cursor-pointer font-bold"
-                      >
-                        <option value="US">🇺🇸 United States (+1)</option>
-                        <option value="IN">🇮🇳 India (+91)</option>
-                      </select>
-                    </div>
-
-                    {/* Owner Legal Name */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-650 block font-mono uppercase tracking-wider">Owner's Name</label>
-                      <div className="relative">
-                        <User className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-400" />
-                        <input
-                          id="owner-name-input"
-                          type="text"
-                          required
-                          placeholder="e.g. Swathi"
-                          value={ownerName}
-                          onChange={(e) => setOwnerName(e.target.value)}
-                          className="w-full bg-zinc-50 border border-zinc-250 focus:bg-white focus:border-amber-500/50 rounded-xl pl-10 pr-4 py-2.5 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none transition font-sans font-semibold"
-                        />
-                      </div>
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-zinc-650 block font-mono uppercase tracking-wider flex items-center gap-1">
+                      <Globe className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Target Region</span>
+                    </label>
+                    <select
+                      id="country-select"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value as "US" | "IN")}
+                      className="w-full bg-zinc-50 border border-zinc-250 focus:bg-white focus:border-amber-500/50 rounded-xl px-3 py-2.5 text-xs text-zinc-800 focus:outline-none transition font-sans cursor-pointer font-bold"
+                    >
+                      <option value="US">🇺🇸 United States (+1)</option>
+                      <option value="IN">🇮🇳 India (+91)</option>
+                    </select>
                   </div>
 
                   {/* Mobile phone number */}
@@ -1363,90 +1302,6 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* ADVANCED OFFLINE & POWERED DOWN PROTOCOLS (Collapsible / Hidden by default as requested) */}
-                  <div className="border border-zinc-200 rounded-2xl overflow-hidden shadow-2xs bg-slate-50">
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvancedDecoys(!showAdvancedDecoys)}
-                      className="w-full px-4 py-3 bg-zinc-150/40 hover:bg-zinc-150/80 flex items-center justify-between text-left transition"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Cpu className="w-4 h-4 text-amber-500 shrink-0" />
-                        <span className="text-xs font-bold text-zinc-700 font-mono uppercase tracking-wider">
-                          Offline &amp; Switch-Off Decoys
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-mono text-zinc-500 font-semibold bg-zinc-200 px-1.5 py-0.5 rounded">STANDBY</span>
-                        {showAdvancedDecoys ? <ChevronUp className="w-4 h-4 text-zinc-400" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}
-                      </div>
-                    </button>
-
-                    {showAdvancedDecoys && (
-                      <div className="p-4 space-y-3.5 border-t border-zinc-200 bg-white">
-                        {/* Control 1: Decentralized Mesh */}
-                        <div className="flex items-start gap-2.5">
-                          <input
-                            type="checkbox"
-                            id="offline-mesh-chk"
-                            checked={offlineMesh}
-                            onChange={(e) => setOfflineMesh(e.target.checked)}
-                            className="mt-1 w-4 h-4 accent-amber-500 rounded border-zinc-300 focus:ring-amber-500 cursor-pointer"
-                          />
-                          <div className="space-y-0.5">
-                            <label htmlFor="offline-mesh-chk" className="text-xs font-bold text-zinc-800 hover:text-amber-600 transition flex items-center gap-1.5 cursor-pointer">
-                              <WifiOff className="w-3.5 h-3.5 text-zinc-500" />
-                              <span>Mesh Multi-Network Relay (UWB/BLE)</span>
-                            </label>
-                            <p className="text-[10px] text-zinc-500 leading-normal font-sans">
-                              Relays secure tracking coordinates via close receiver nodes in India &amp; US without Wi-Fi/cellular connection.
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Control 2: Emergency GSM Baseband */}
-                        <div className="flex items-start gap-2.5">
-                          <input
-                            type="checkbox"
-                            id="emergency-gsm-chk"
-                            checked={emergencyGsm}
-                            onChange={(e) => setEmergencyGsm(e.target.checked)}
-                            className="mt-1 w-4 h-4 accent-amber-500 rounded border-zinc-300 focus:ring-amber-500 cursor-pointer"
-                          />
-                          <div className="space-y-0.5">
-                            <label htmlFor="emergency-gsm-chk" className="text-xs font-bold text-zinc-800 hover:text-amber-600 transition flex items-center gap-1.5 cursor-pointer">
-                              <Signal className="w-3.5 h-3.5 text-zinc-500" />
-                              <span>GSM Emergency Tower Triangulation</span>
-                            </label>
-                            <p className="text-[10px] text-zinc-500 leading-normal font-sans">
-                              Direct antenna signal handshaking with nearby base stations. Bypass empty network subscriptions.
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Control 3: Power-Off Reserves */}
-                        <div className="flex items-start gap-2.5">
-                          <input
-                            type="checkbox"
-                            id="reserve-battery-chk"
-                            checked={reserveBattery}
-                            onChange={(e) => setReserveBattery(e.target.checked)}
-                            className="mt-1 w-4 h-4 accent-amber-500 rounded border-zinc-300 focus:ring-amber-500 cursor-pointer"
-                          />
-                          <div className="space-y-0.5">
-                            <label htmlFor="reserve-battery-chk" className="text-xs font-bold text-zinc-800 hover:text-amber-600 transition flex items-center gap-1.5 cursor-pointer">
-                              <PowerOff className="w-3.5 h-3.5 text-zinc-500" />
-                              <span>Power-Off Reserves &amp; Switched-off Tracking</span>
-                            </label>
-                            <p className="text-[10px] text-zinc-500 leading-normal font-sans">
-                              Employs low-energy ultra-wideband (UWB) tracking beacons via reserve hardware micro-capacitors when power lies offline.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
                   <button
                     id="track-button"
                     type="submit"
@@ -1524,16 +1379,10 @@ export default function App() {
                   <div className="flex items-center gap-1">
                     <span>Lost Device:</span> <strong className="text-zinc-900 font-mono font-bold text-xs">{trackingInfo.phoneNumber}</strong>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span>• Owner Name:</span> <strong className="text-zinc-900 font-semibold">{trackingInfo.ownerName}</strong>
-                  </div>
                   <div className="flex items-center gap-1.5 font-mono text-[10px]">
                     <span className="text-zinc-400">•</span>
                     <span className="font-bold bg-zinc-100 text-zinc-700 border border-zinc-200 px-2 py-0.5 rounded-md flex items-center gap-1">
                       {country === "IN" ? "🇮🇳 India Recovery Node" : "🇺🇸 USA Recovery Node"}
-                    </span>
-                    <span className="font-bold bg-amber-50 text-amber-705 border border-amber-200 px-2 py-0.5 rounded-md">
-                      Offline Mode Enabled (Data/Wi-Fi/Power Independent)
                     </span>
                   </div>
                 </div>
@@ -1981,67 +1830,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* MODAL: Master Profile Disconnect (Require Password Authorization) */}
-      {isDisconnectConfirmModalOpen && (
-        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white border border-zinc-200 rounded-2xl max-w-md w-full p-6 space-y-4 relative overflow-hidden shadow-xl">
-            <div className="absolute top-0 inset-x-0 h-1 bg-rose-500" />
-            
-            <h3 className="text-sm font-bold text-zinc-900 flex items-center space-x-2">
-              <ShieldAlert className="w-4 h-4 text-rose-500 animate-pulse" />
-              <span>Unlinking Security Authorization</span>
-            </h3>
-            <p className="text-xs text-zinc-600 leading-relaxed">
-              Warning: You are attempting to uninstall the active tracking configuration and disconnect server communications for <strong className="text-zinc-900">{trackingInfo?.phoneNumber}</strong>.
-            </p>
-            <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 p-3 rounded-xl leading-relaxed">
-              This action requires authorization. To proceed, please enter the administrative uninstall protection key.
-            </p>
-
-            <form onSubmit={handleDisconnectConfirm} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs text-zinc-600 font-bold block font-mono">Administrative Security Key</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Enter administrator password..."
-                  value={disconnectInputPassword}
-                  onChange={(e) => setDisconnectInputPassword(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-3 text-xs text-zinc-800 placeholder-zinc-400 font-mono focus:outline-none focus:border-rose-500/50"
-                />
-                <div className="p-2 bg-slate-50 border border-zinc-150 rounded-xl text-[10px] font-mono text-zinc-500 flex justify-between">
-                  <span>Confidential Bypass Hint:</span>
-                  <span className="text-amber-600 font-bold">{uninstallPassword}</span>
-                </div>
-              </div>
-
-              {disconnectError && (
-                <div className="text-xs text-rose-700 bg-rose-50 p-2.5 rounded-lg border border-rose-200 font-bold uppercase font-mono tracking-wide">
-                  {disconnectError}
-                </div>
-              )}
-
-              <div className="flex space-x-2 pt-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setIsDisconnectConfirmModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-zinc-700 font-semibold transition"
-                >
-                  Cancel Operation
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold transition uppercase tracking-wider h-10"
-                >
-                  Uninstall Profile
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Footer attribution */}
       <footer className="border-t border-zinc-200 bg-white py-5 px-6 text-center text-[10px] text-zinc-500 font-mono mt-auto shadow-2xs">
         <span>© {new Date().getFullYear()} Phone tracker • Protected signal channels in India and USA</span>

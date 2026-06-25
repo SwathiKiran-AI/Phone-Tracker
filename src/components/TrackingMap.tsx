@@ -351,7 +351,7 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-zinc-650 font-mono">
           <div className="flex justify-between items-center py-1 border-b border-dashed border-zinc-100 sm:border-0">
             <span className="text-zinc-400 uppercase tracking-wider">Device ID Marker:</span>
-            <span className="font-bold text-zinc-805 text-zinc-800 font-sans">{ownerName}'s Lost Phone</span>
+            <span className="font-bold text-zinc-805 text-zinc-800 font-sans">Target Lost Device</span>
           </div>
           <div className="flex justify-between items-center py-1 border-b border-dashed border-zinc-100 sm:border-0">
             <span className="text-zinc-400 uppercase tracking-wider">Estimated Precision Check:</span>
