@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Compass, ZoomIn, ZoomOut, Navigation, Map, Layers } from "lucide-react";
 import { TrackingLocation } from "../types";
-import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from "@vis.gl/react-google-maps";
 
 const GOOGLE_MAPS_KEY =
   process.env.GOOGLE_MAPS_PLATFORM_KEY ||
@@ -18,166 +17,25 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
   const [zoom, setZoom] = useState<number>(3.0);
   const [mapMode, setMapMode] = useState<"standard" | "satellite" | "hybrid">("hybrid");
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
 
-  const [isLoaded, setIsLoaded] = useState(false);
-  const mapInstanceRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
-  const circleRef = useRef<any>(null);
-  const tileLayerRef = useRef<any>(null);
-
   const [dimensions, setDimensions] = useState({ width: 720, height: 330 });
 
-  // Dynamic script/style injection of Leaflet
+  // Handle container resizing to keep radar canvas perfectly dimensioned
   useEffect(() => {
-    if (hasValidKey) return; // Skip Leaflet if Google Maps is active
-    const cssId = "leaflet-css";
-    if (!document.getElementById(cssId)) {
-      const link = document.createElement("link");
-      link.id = cssId;
-      link.rel = "stylesheet";
-      link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
-      document.head.appendChild(link);
-    }
+    const container = containerRef.current;
+    if (!container) return;
 
-    const jsId = "leaflet-js";
-    if (!document.getElementById(jsId)) {
-      const script = document.createElement("script");
-      script.id = jsId;
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-      script.async = true;
-      script.onload = () => setIsLoaded(true);
-      document.body.appendChild(script);
-    } else {
-      if ((window as any).L) {
-        setIsLoaded(true);
-      } else {
-        const interval = setInterval(() => {
-          if ((window as any).L) {
-            setIsLoaded(true);
-            clearInterval(interval);
-          }
-        }, 100);
-        return () => clearInterval(interval);
-      }
-    }
+    const observer = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0) return;
+      const { width, height } = entries[0].contentRect;
+      setDimensions({ width: width || 720, height: height || 330 });
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
   }, []);
-
-  // Initialize Map Instance on target coordinates when loaded
-  useEffect(() => {
-    if (hasValidKey) return; // Skip Leaflet if Google Maps is active
-    if (!isLoaded || !mapContainerRef.current) return;
-
-    const L = (window as any).L;
-    if (!L) return;
-
-    const calcLeafletZoom = (z: number) => {
-      // Scale from zoom state (1.2 to 6.0) to Leaflet zoom levels (11 to 18)
-      return Math.round(11 + (z - 1.2) * (7 / 4.8));
-    };
-
-    const initialZoom = calcLeafletZoom(zoom);
-
-    // Create map
-    const map = L.map(mapContainerRef.current, {
-      center: [location.latitude, location.longitude],
-      zoom: initialZoom,
-      zoomControl: false,
-      attributionControl: false,
-      fadeAnimation: true,
-    });
-
-    mapInstanceRef.current = map;
-
-    // Define tile layers
-    let tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-    if (mapMode === "satellite" || mapMode === "hybrid") {
-      tileUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-    }
-
-    const tileLayer = L.tileLayer(tileUrl, {
-      maxZoom: 19,
-    }).addTo(map);
-    tileLayerRef.current = tileLayer;
-
-    // Custom pulsing marker pin represent GPS beacon
-    const trackingIcon = L.divIcon({
-      className: '',
-      html: `
-        <div style="position: relative; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;">
-          <div style="position: absolute; width: 44px; height: 44px; background: rgba(245, 158, 11, 0.2); border: 2px dashed rgba(245, 158, 11, 0.6); border-radius: 9999px; animation: ping 1.5s infinite;"></div>
-          <div style="position: absolute; width: 14px; height: 14px; background: #eab308; border: 2px solid #ffffff; border-radius: 9999px; box-shadow: 0 2px 5px rgba(0,0,0,0.45);"></div>
-        </div>
-      `,
-      iconSize: [22, 22],
-      iconAnchor: [11, 11]
-    });
-
-    const marker = L.marker([location.latitude, location.longitude], { icon: trackingIcon }).addTo(map);
-    markerRef.current = marker;
-
-    // Circle of accuracy
-    const circle = L.circle([location.latitude, location.longitude], {
-      color: mapMode === "standard" ? "#d97706" : "#22c55e",
-      fillColor: mapMode === "standard" ? "#f59e0b" : "#22c55e",
-      fillOpacity: 0.12,
-      weight: 1.5,
-      radius: location.accuracyMeters * 4,
-    }).addTo(map);
-    circleRef.current = circle;
-
-    return () => {
-      map.remove();
-      mapInstanceRef.current = null;
-      markerRef.current = null;
-      circleRef.current = null;
-      tileLayerRef.current = null;
-    };
-  }, [isLoaded, dimensions.width, dimensions.height]); // Re-render when size snaps
-
-  // Sync coordinate changes, zooms, and map modes dynamically
-  useEffect(() => {
-    if (hasValidKey) return; // Skip Leaflet if Google Maps is active
-    if (!isLoaded || !mapInstanceRef.current) return;
-    const map = mapInstanceRef.current;
-
-    const calcLeafletZoom = (z: number) => {
-      return Math.round(11 + (z - 1.2) * (7 / 4.8));
-    };
-
-    const targetZoom = calcLeafletZoom(zoom);
-    map.setView([location.latitude, location.longitude], targetZoom);
-    
-    // Explicitly invalidate sizing to force Leaflet to recalculate container borders and load correct imagery
-    setTimeout(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-      }
-    }, 100);
-
-    if (markerRef.current) {
-      markerRef.current.setLatLng([location.latitude, location.longitude]);
-    }
-
-    if (circleRef.current) {
-      circleRef.current.setLatLng([location.latitude, location.longitude]);
-      circleRef.current.setRadius(location.accuracyMeters * 4);
-      circleRef.current.setStyle({
-        color: mapMode === "standard" ? "#d97706" : "#10b981",
-        fillColor: mapMode === "standard" ? "#f59e0b" : "#10b981",
-      });
-    }
-
-    if (tileLayerRef.current) {
-      let tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-      if (mapMode === "satellite" || mapMode === "hybrid") {
-        tileUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-      }
-      tileLayerRef.current.setUrl(tileUrl);
-    }
-  }, [location.latitude, location.longitude, location.accuracyMeters, zoom, mapMode, isLoaded]);
 
   // Overlay HUD scanning lines (Super-crisp Canvas over map context)
   useEffect(() => {
@@ -249,57 +107,31 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
     };
   }, [dimensions, mapMode]);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const observer = new ResizeObserver((entries) => {
-      if (!entries || entries.length === 0) return;
-      const { width, height } = entries[0].contentRect;
-      setDimensions({ width: width || 720, height: height || 330 });
-      if (mapInstanceRef.current) {
-        // Redraw or invalidate size on Leaflet wrapper
-        setTimeout(() => {
-          if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
-        }, 120);
-      }
-    });
-
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
+  // Translate zoom slider state (1.2 to 6.0) to Google Maps zoom levels (11 to 20)
+  const googleMapsZoom = Math.round(11 + (zoom - 1.2) * (8 / 4.8));
+  // Translate map mode standard/satellite/hybrid to Google Maps 't' parameter
+  const mapTypeParam = mapMode === "standard" ? "m" : mapMode === "satellite" ? "k" : "h";
+  // Create standard embedded Google Maps URL with correct pin lat/lng coordinates and view parameters
+  const embeddedMapUrl = `https://maps.google.com/maps?q=${location.latitude},${location.longitude}&z=${googleMapsZoom}&t=${mapTypeParam}&output=embed`;
 
   return (
     <div className="flex flex-col gap-4">
       {/* Map Viewer Box */}
       <div ref={containerRef} className="relative w-full h-[320px] rounded-2xl border border-zinc-200 bg-zinc-950 overflow-hidden shadow-sm flex flex-col justify-end">
-        {/* Map Base Selection */}
-        {hasValidKey ? (
-          <div className="absolute inset-0 z-0 bg-zinc-900" style={{ width: "100%", height: "100%" }}>
-            <APIProvider apiKey={GOOGLE_MAPS_KEY} version="weekly">
-              <GoogleMap
-                center={{ lat: location.latitude, lng: location.longitude }}
-                zoom={Math.round(13 + (zoom - 3.0) * 1.5)}
-                mapTypeId={mapMode === "standard" ? "roadmap" : mapMode === "satellite" ? "satellite" : "hybrid"}
-                mapId="DEMO_MAP_ID"
-                internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-                style={{ width: "100%", height: "100%" }}
-                disableDefaultUI={true}
-              >
-                <AdvancedMarker position={{ lat: location.latitude, lng: location.longitude }}>
-                  <Pin background="#eab308" borderColor="#ffffff" glyphColor="#ffffff" />
-                </AdvancedMarker>
-              </GoogleMap>
-            </APIProvider>
-          </div>
-        ) : (
-          /* Dynamic Leaflet Target Map Base fallback when no Google Maps key configured */
-          <div 
-            ref={mapContainerRef} 
-            className="absolute inset-0 z-0 bg-zinc-900" 
-            style={{ width: "100%", height: "100%" }}
+        
+        {/* Real Embedded Google Maps Frame */}
+        <div className="absolute inset-0 z-0 bg-zinc-900" style={{ width: "100%", height: "100%" }}>
+          <iframe
+            title="Embedded Google Maps Target Tracker"
+            width="100%"
+            height="100%"
+            style={{ border: 0 }}
+            loading="eager"
+            allowFullScreen
+            referrerPolicy="no-referrer"
+            src={embeddedMapUrl}
           />
-        )}
+        </div>
 
         {/* Military Sweeping & Triangulation radar lines overlay */}
         <canvas
@@ -312,10 +144,10 @@ export default function TrackingMap({ location, ownerName }: TrackingMapProps) {
           <Navigation className="w-4 h-4 text-amber-500 animate-pulse rotate-45" />
           <div>
             <span className="text-[9px] font-mono font-bold text-zinc-900 uppercase tracking-wider block font-semibold">
-              {hasValidKey ? "CONNECTED TO GOOGLE MAPS" : "LIVE DEVICE GPS TELEMETRY"}
+              LIVE GOOGLE MAPS GPS EMBED
             </span>
             <span className="text-[8px] text-zinc-500 font-mono block">
-              {hasValidKey ? "OFFICIAL SATELLITE OVERLAY FEED" : "HYBRID SECURE BASE STATIONS FEED"}
+              REAL-TIME HIGH FIDELITY GEOMETRY
             </span>
           </div>
         </div>
