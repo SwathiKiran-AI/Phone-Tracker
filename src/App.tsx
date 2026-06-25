@@ -106,6 +106,46 @@ async function getReverseGeocodeClient(lat: number, lng: number, country: string
     console.warn("Client Nominatim geocode unsuccessful, falling back to local database mapping.");
   }
 
+  const usCities = [
+    { city: "New York City", state: "NY", postcode: "10001", lat: 40.7128, lng: -74.0060 },
+    { city: "Los Angeles", state: "CA", postcode: "90001", lat: 34.0522, lng: -118.2437 },
+    { city: "Chicago", state: "IL", postcode: "60601", lat: 41.8781, lng: -87.6298 },
+    { city: "Houston", state: "TX", postcode: "77001", lat: 29.7604, lng: -95.3698 },
+    { city: "Dallas", state: "GA", postcode: "30132", lat: 33.9237, lng: -84.8408 },
+    { city: "San Francisco", state: "CA", postcode: "94101", lat: 37.7749, lng: -122.4194 },
+    { city: "Seattle", state: "WA", postcode: "98101", lat: 47.6062, lng: -122.3321 },
+    { city: "Miami", state: "FL", postcode: "33101", lat: 25.7617, lng: -80.1918 },
+    { city: "Boston", state: "MA", postcode: "02101", lat: 42.3601, lng: -71.0589 },
+    { city: "Austin", state: "TX", postcode: "78701", lat: 30.2672, lng: -97.7431 },
+    { city: "Las Vegas", state: "NV", postcode: "89101", lat: 36.1716, lng: -115.1398 }
+  ];
+
+  const inCities = [
+    { city: "Bengaluru", state: "Karnataka", postcode: "560001", lat: 12.9716, lng: 77.5946 },
+    { city: "Mumbai", state: "Maharashtra", postcode: "400001", lat: 19.0760, lng: 72.8777 },
+    { city: "Delhi", state: "Delhi", postcode: "110001", lat: 28.6139, lng: 77.2090 },
+    { city: "Kolkata", state: "West Bengal", postcode: "700001", lat: 22.5726, lng: 88.3639 },
+    { city: "Chennai", state: "Tamil Nadu", postcode: "600001", lat: 13.0827, lng: 80.2707 },
+    { city: "Hyderabad", state: "Telangana", postcode: "500001", lat: 17.3850, lng: 78.4867 },
+    { city: "Pune", state: "Maharashtra", postcode: "411001", lat: 18.5204, lng: 73.8567 },
+    { city: "Ahmedabad", state: "Gujarat", postcode: "380001", lat: 23.0225, lng: 72.5714 },
+    { city: "Jaipur", state: "Rajasthan", postcode: "302001", lat: 26.9124, lng: 75.7873 },
+    { city: "Coimbatore", state: "Tamil Nadu", postcode: "641001", lat: 11.0168, lng: 76.9558 },
+    { city: "Lucknow", state: "Uttar Pradesh", postcode: "226001", lat: 26.8467, lng: 80.9462 },
+    { city: "Kochi", state: "Kerala", postcode: "682001", lat: 9.9312, lng: 76.2673 }
+  ];
+
+  const cities = zone === "US" ? usCities : inCities;
+  let nearest = cities[0];
+  let minDistance = Infinity;
+  for (const c of cities) {
+    const dist = Math.pow(c.lat - lat, 2) + Math.pow(c.lng - lng, 2);
+    if (dist < minDistance) {
+      minDistance = dist;
+      nearest = c;
+    }
+  }
+
   // Fallback to high-fidelity street addresses based on zone
   if (zone === "IN") {
     const flat = flatNamesIN[numSeed % flatNamesIN.length];
@@ -113,39 +153,38 @@ async function getReverseGeocodeClient(lat: number, lng: number, country: string
       "12th Main Road, HAL 2nd Stage",
       "CMH Road, Lakshmipuram",
       "100 Feet Road",
-      "80 Feet Road, Koramangala 4th Block",
-      "MG Road, Ashok Nagar"
+      "80 Feet Road, Sector 4",
+      "MG Road, Central Zone"
     ];
     const areas = [
-      "Indiranagar",
-      "Koramangala",
-      "Ashok Nagar",
-      "HAL Stage 2",
-      "Lakshmipuram"
+      "Subdivision A",
+      "Central Market Area",
+      "Green View Sector",
+      "Garrison Area",
+      "Residential Hub"
     ];
     const street = streets[(numSeed + 1) % streets.length];
     const area = areas[(numSeed + 2) % areas.length];
-    return `${flat}, ${street}, ${area}, Bengaluru, Karnataka, 560038, India`;
+    return `${flat}, ${street}, ${area}, ${nearest.city}, ${nearest.state}, ${nearest.postcode}, India`;
   } else {
     const flat = flatNamesUS[numSeed % flatNamesUS.length];
     const streets = [
-      "Hardee Street",
-      "W Memorial Drive",
-      "Dallas Acworth Hwy",
-      "Merchant Drive",
-      "Paulding Plaza",
-      "Main Street"
+      "Main Street",
+      "Grand Avenue",
+      "Pine Road",
+      "Oak Drive",
+      "Parkway Avenue"
     ];
     const areas = [
-      "Downtown Dallas Area",
-      "Paulding County Area",
-      "Silver Ridge Subdivision",
-      "Country Lake Club",
-      "Laurel Springs Sector"
+      "Downtown Area",
+      "West End District",
+      "Northside Sub",
+      "Valley View Sector",
+      "Commercial Center"
     ];
     const street = streets[(numSeed + 1) % streets.length];
     const area = areas[(numSeed + 2) % areas.length];
-    return `${flat}, ${street}, ${area}, Dallas, Georgia, 30132, USA`;
+    return `${flat}, ${street}, ${area}, ${nearest.city}, ${nearest.state}, ${nearest.postcode}, USA`;
   }
 }
 
@@ -154,23 +193,161 @@ export function resolveTargetLocation(phoneNumber: string, country: "US" | "IN")
   const digits = phoneNumber.replace(/\D/g, "");
   const numSeed = digits.split("").reduce((acc, c) => acc + (parseInt(c, 10) || 0), 0);
   
+  const usCities = [
+    { city: "New York City, NY", lat: 40.7128, lng: -74.0060 },
+    { city: "Los Angeles, CA", lat: 34.0522, lng: -118.2437 },
+    { city: "Chicago, IL", lat: 41.8781, lng: -87.6298 },
+    { city: "Houston, TX", lat: 29.7604, lng: -95.3698 },
+    { city: "Dallas, GA", lat: 33.9237, lng: -84.8408 },
+    { city: "San Francisco, CA", lat: 37.7749, lng: -122.4194 },
+    { city: "Seattle, WA", lat: 47.6062, lng: -122.3321 },
+    { city: "Miami, FL", lat: 25.7617, lng: -80.1918 },
+    { city: "Boston, MA", lat: 42.3601, lng: -71.0589 },
+    { city: "Austin, TX", lat: 30.2672, lng: -97.7431 },
+    { city: "Las Vegas, NV", lat: 36.1716, lng: -115.1398 }
+  ];
+
+  const inCities = [
+    { city: "Bengaluru, Karnataka", lat: 12.9716, lng: 77.5946 },
+    { city: "Mumbai, Maharashtra", lat: 19.0760, lng: 72.8777 },
+    { city: "Delhi", lat: 28.6139, lng: 77.2090 },
+    { city: "Kolkata, West Bengal", lat: 22.5726, lng: 88.3639 },
+    { city: "Chennai, Tamil Nadu", lat: 13.0827, lng: 80.2707 },
+    { city: "Hyderabad, Telangana", lat: 17.3850, lng: 78.4867 },
+    { city: "Pune, Maharashtra", lat: 18.5204, lng: 73.8567 },
+    { city: "Ahmedabad, Gujarat", lat: 23.0225, lng: 72.5714 },
+    { city: "Jaipur, Rajasthan", lat: 26.9124, lng: 75.7873 },
+    { city: "Coimbatore, Tamil Nadu", lat: 11.0168, lng: 76.9558 },
+    { city: "Lucknow, Uttar Pradesh", lat: 26.8467, lng: 80.9462 },
+    { city: "Kochi, Kerala", lat: 9.9312, lng: 76.2673 }
+  ];
+
   if (country === "US") {
-    // Center all searches beautifully in Dallas, Georgia with small unique offsets based on the number to show live tracking precision
-    const latOffset = ((numSeed % 6) * 0.0004) - 0.001;
-    const lngOffset = ((numSeed % 6) * 0.0004) - 0.001;
+    // Get 3-digit area code (skipping leading 1 if present)
+    let areaCode = "";
+    if (digits.length >= 10) {
+      const mainDigits = digits.startsWith("1") ? digits.substring(1) : digits;
+      areaCode = mainDigits.substring(0, 3);
+    }
+    
+    const areaCodeMap: Record<string, typeof usCities[0]> = {
+      "201": { city: "Jersey City, NJ", lat: 40.7178, lng: -74.0431 },
+      "551": { city: "Jersey City, NJ", lat: 40.7178, lng: -74.0431 },
+      "202": { city: "Washington, DC", lat: 38.9072, lng: -77.0369 },
+      "206": { city: "Seattle, WA", lat: 47.6062, lng: -122.3321 },
+      "212": { city: "New York City, NY", lat: 40.7128, lng: -74.0060 },
+      "646": { city: "New York City, NY", lat: 40.7128, lng: -74.0060 },
+      "917": { city: "New York City, NY", lat: 40.7128, lng: -74.0060 },
+      "213": { city: "Los Angeles, CA", lat: 34.0522, lng: -118.2437 },
+      "310": { city: "Los Angeles, CA", lat: 34.0522, lng: -118.2437 },
+      "323": { city: "Los Angeles, CA", lat: 34.0522, lng: -118.2437 },
+      "424": { city: "Los Angeles, CA", lat: 34.0522, lng: -118.2437 },
+      "305": { city: "Miami, FL", lat: 25.7617, lng: -80.1918 },
+      "786": { city: "Miami, FL", lat: 25.7617, lng: -80.1918 },
+      "312": { city: "Chicago, IL", lat: 41.8781, lng: -87.6298 },
+      "773": { city: "Chicago, IL", lat: 41.8781, lng: -87.6298 },
+      "872": { city: "Chicago, IL", lat: 41.8781, lng: -87.6298 },
+      "415": { city: "San Francisco, CA", lat: 37.7749, lng: -122.4194 },
+      "628": { city: "San Francisco, CA", lat: 37.7749, lng: -122.4194 },
+      "512": { city: "Austin, TX", lat: 30.2672, lng: -97.7431 },
+      "737": { city: "Austin, TX", lat: 30.2672, lng: -97.7431 },
+      "617": { city: "Boston, MA", lat: 42.3601, lng: -71.0589 },
+      "857": { city: "Boston, MA", lat: 42.3601, lng: -71.0589 },
+      "702": { city: "Las Vegas, NV", lat: 36.1716, lng: -115.1398 },
+      "725": { city: "Las Vegas, NV", lat: 36.1716, lng: -115.1398 },
+      "770": { city: "Dallas, GA", lat: 33.9237, lng: -84.8408 },
+      "678": { city: "Dallas, GA", lat: 33.9237, lng: -84.8408 },
+      "470": { city: "Dallas, GA", lat: 33.9237, lng: -84.8408 },
+      "706": { city: "Dallas, GA", lat: 33.9237, lng: -84.8408 },
+      "832": { city: "Houston, TX", lat: 29.7604, lng: -95.3698 },
+      "281": { city: "Houston, TX", lat: 29.7604, lng: -95.3698 },
+      "713": { city: "Houston, TX", lat: 29.7604, lng: -95.3698 },
+      "972": { city: "Dallas, TX", lat: 32.7767, lng: -96.7970 },
+      "214": { city: "Dallas, TX", lat: 32.7767, lng: -96.7970 },
+      "469": { city: "Dallas, TX", lat: 32.7767, lng: -96.7970 }
+    };
+
+    let targetBase = areaCodeMap[areaCode];
+    if (!targetBase) {
+      targetBase = usCities[numSeed % usCities.length];
+    }
+
+    const latOffset = ((numSeed % 11) * 0.0006) - 0.003;
+    const lngOffset = ((numSeed % 11) * 0.0006) - 0.003;
     return {
-      city: "Dallas, GA",
-      lat: 33.9237 + latOffset,
-      lng: -84.8408 + lngOffset
+      city: targetBase.city,
+      lat: targetBase.lat + latOffset,
+      lng: targetBase.lng + lngOffset
     };
   } else {
-    // Center all searches beautifully in Bengaluru, India with small unique offsets based on the number
-    const latOffset = ((numSeed % 6) * 0.0004) - 0.001;
-    const lngOffset = ((numSeed % 6) * 0.0004) - 0.001;
+    let mobilePrefix = "";
+    if (digits.length >= 4) {
+      const last10 = digits.substring(digits.length - 10);
+      mobilePrefix = last10.substring(0, 4);
+    }
+
+    const indiaPrefixMap: Record<string, typeof inCities[0]> = {
+      "9845": { city: "Bengaluru, Karnataka", lat: 12.9716, lng: 77.5946 },
+      "9448": { city: "Bengaluru, Karnataka", lat: 12.9716, lng: 77.5946 },
+      "9945": { city: "Bengaluru, Karnataka", lat: 12.9716, lng: 77.5946 },
+      "9880": { city: "Bengaluru, Karnataka", lat: 12.9716, lng: 77.5946 },
+      "9820": { city: "Mumbai, Maharashtra", lat: 19.0760, lng: 72.8777 },
+      "9819": { city: "Mumbai, Maharashtra", lat: 19.0760, lng: 72.8777 },
+      "9892": { city: "Mumbai, Maharashtra", lat: 19.0760, lng: 72.8777 },
+      "9821": { city: "Mumbai, Maharashtra", lat: 19.0760, lng: 72.8777 },
+      "9810": { city: "Delhi", lat: 28.6139, lng: 77.2090 },
+      "9811": { city: "Delhi", lat: 28.6139, lng: 77.2090 },
+      "9818": { city: "Delhi", lat: 28.6139, lng: 77.2090 },
+      "9910": { city: "Delhi", lat: 28.6139, lng: 77.2090 },
+      "9830": { city: "Kolkata, West Bengal", lat: 22.5726, lng: 88.3639 },
+      "9831": { city: "Kolkata, West Bengal", lat: 22.5726, lng: 88.3639 },
+      "9836": { city: "Kolkata, West Bengal", lat: 22.5726, lng: 88.3639 },
+      "9051": { city: "Kolkata, West Bengal", lat: 22.5726, lng: 88.3639 },
+      "9840": { city: "Chennai, Tamil Nadu", lat: 13.0827, lng: 80.2707 },
+      "9841": { city: "Chennai, Tamil Nadu", lat: 13.0827, lng: 80.2707 },
+      "9444": { city: "Chennai, Tamil Nadu", lat: 13.0827, lng: 80.2707 },
+      "9884": { city: "Chennai, Tamil Nadu", lat: 13.0827, lng: 80.2707 },
+      "9848": { city: "Hyderabad, Telangana", lat: 17.3850, lng: 78.4867 },
+      "9849": { city: "Hyderabad, Telangana", lat: 17.3850, lng: 78.4867 },
+      "9948": { city: "Hyderabad, Telangana", lat: 17.3850, lng: 78.4867 },
+      "9989": { city: "Hyderabad, Telangana", lat: 17.3850, lng: 78.4867 },
+      "9822": { city: "Pune, Maharashtra", lat: 18.5204, lng: 73.8567 },
+      "9823": { city: "Pune, Maharashtra", lat: 18.5204, lng: 73.8567 },
+      "9890": { city: "Pune, Maharashtra", lat: 18.5204, lng: 73.8567 },
+      "9422": { city: "Pune, Maharashtra", lat: 18.5204, lng: 73.8567 },
+      "9825": { city: "Ahmedabad, Gujarat", lat: 23.0225, lng: 72.5714 },
+      "9426": { city: "Ahmedabad, Gujarat", lat: 23.0225, lng: 72.5714 },
+      "9898": { city: "Ahmedabad, Gujarat", lat: 23.0225, lng: 72.5714 },
+      "9909": { city: "Ahmedabad, Gujarat", lat: 23.0225, lng: 72.5714 },
+      "9829": { city: "Jaipur, Rajasthan", lat: 26.9124, lng: 75.7873 },
+      "9414": { city: "Jaipur, Rajasthan", lat: 26.9124, lng: 75.7873 },
+      "9887": { city: "Jaipur, Rajasthan", lat: 26.9124, lng: 75.7873 },
+      "9928": { city: "Jaipur, Rajasthan", lat: 26.9124, lng: 75.7873 },
+      "9842": { city: "Coimbatore, Tamil Nadu", lat: 11.0168, lng: 76.9558 },
+      "9843": { city: "Coimbatore, Tamil Nadu", lat: 11.0168, lng: 76.9558 },
+      "9443": { city: "Coimbatore, Tamil Nadu", lat: 11.0168, lng: 76.9558 },
+      "9943": { city: "Coimbatore, Tamil Nadu", lat: 11.0168, lng: 76.9558 },
+      "9837": { city: "Lucknow, Uttar Pradesh", lat: 26.8467, lng: 80.9462 },
+      "9412": { city: "Lucknow, Uttar Pradesh", lat: 26.8467, lng: 80.9462 },
+      "9839": { city: "Lucknow, Uttar Pradesh", lat: 26.8467, lng: 80.9462 },
+      "9415": { city: "Lucknow, Uttar Pradesh", lat: 26.8467, lng: 80.9462 },
+      "9846": { city: "Kochi, Kerala", lat: 9.9312, lng: 76.2673 },
+      "9847": { city: "Kochi, Kerala", lat: 9.9312, lng: 76.2673 },
+      "9447": { city: "Kochi, Kerala", lat: 9.9312, lng: 76.2673 },
+      "9947": { city: "Kochi, Kerala", lat: 9.9312, lng: 76.2673 }
+    };
+
+    let targetBase = indiaPrefixMap[mobilePrefix];
+    if (!targetBase) {
+      targetBase = inCities[numSeed % inCities.length];
+    }
+
+    const latOffset = ((numSeed % 11) * 0.0006) - 0.003;
+    const lngOffset = ((numSeed % 11) * 0.0006) - 0.003;
     return {
-      city: "Bengaluru, Karnataka",
-      lat: 12.9716 + latOffset,
-      lng: 77.5946 + lngOffset
+      city: targetBase.city,
+      lat: targetBase.lat + latOffset,
+      lng: targetBase.lng + lngOffset
     };
   }
 }
@@ -370,101 +547,19 @@ export default function App() {
     setSearchStep(0);
     setSearchStatusList([]);
 
-    // 1. Resolve high-precision lost phone location using hybrid Browser GPS & Network IP lookup, or Area Code Geopositioning as accurate fallbacks
-    let targetLat: number | undefined;
-    let targetLng: number | undefined;
-    let resolvedCity = "Dallas, GA";
-
-    // Attempt browser high-accuracy GPS coordinates first to match user's true local device
-    try {
-      if (navigator.geolocation) {
-        const coordsPromise = new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 10000, // 10 seconds to allow the user to approve permission
-            maximumAge: 600000 // 10 minutes cache to load coordinates instantly
-          });
-        });
-        const pos = await coordsPromise;
-        const glat = pos.coords.latitude;
-        const glng = pos.coords.longitude;
-        const isIndiaCoords = (glat > 6 && glat < 36 && glng > 68 && glng < 97);
-        if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
-          targetLat = glat;
-          targetLng = glng;
-          resolvedCity = "Browser GPS locked";
-          console.log("GSM Simulator: Browser live physical GPS locked successfully:", targetLat, targetLng);
-        } else {
-          console.log("GSM Simulator: Browser GPS is in another region, using regional simulator coordinates for selected country.");
-        }
-      }
-    } catch (geowarn) {
-      console.warn("GSM Simulator: Browser GPS unavailable or denied, shifting to IP Geolocation database lookup:", geowarn);
-    }
-
-    // Attempt IP Geolocation dynamically if browser GPS is blocked, guaranteeing local county tracking
-    if (targetLat == null || targetLng == null) {
-      try {
-        const ipRes = await fetch("https://ipapi.co/json/");
-        if (ipRes.ok) {
-          const ipData = await ipRes.json();
-          if (ipData && ipData.latitude && ipData.longitude) {
-            const ilat = Number(ipData.latitude);
-            const ilng = Number(ipData.longitude);
-            const isIndiaCoords = (ilat > 6 && ilat < 36 && ilng > 68 && ilng < 97);
-            if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
-              targetLat = ilat;
-              targetLng = ilng;
-              resolvedCity = ipData.city || "Network Node Area";
-              console.log("GSM Simulator: IP Geolocation resolved regional coordinates:", targetLat, targetLng);
-            } else {
-              console.log("GSM Simulator: IP Geolocation is in another region, skipping override.");
-            }
-          }
-        }
-      } catch (ipErr) {
-        console.warn("GSM Simulator: ipapi.co failed, trying freeipapi.com backup:", ipErr);
-        try {
-          const backupRes = await fetch("https://freeipapi.com/api/json");
-          if (backupRes.ok) {
-            const backupData = await backupRes.json();
-            if (backupData && backupData.latitude && backupData.longitude) {
-              const ilat = Number(backupData.latitude);
-              const ilng = Number(backupData.longitude);
-              const isIndiaCoords = (ilat > 6 && ilat < 36 && ilng > 68 && ilng < 97);
-              if ((country === "IN" && isIndiaCoords) || (country === "US" && !isIndiaCoords)) {
-                targetLat = ilat;
-                targetLng = ilng;
-                resolvedCity = backupData.cityName || "Network Node Area Backup";
-                console.log("GSM Simulator: Backup IP Geolocation resolved coordinates:", targetLat, targetLng);
-              } else {
-                console.log("GSM Simulator: Backup IP Geolocation is in another region, skipping override.");
-              }
-            }
-          }
-        } catch (backupErr) {
-          console.warn("GSM Simulator: Backup IP Geolocation query skipped, using area-code mapping:", backupErr);
-        }
-      }
-    }
-
-    // Under all cases if no dynamic coordinates are locked, use country area-code database match
-    if (targetLat == null || targetLng == null) {
-      const resolvedLoc = resolveTargetLocation(phoneNumber, country);
-      targetLat = resolvedLoc.lat;
-      targetLng = resolvedLoc.lng;
-      resolvedCity = resolvedLoc.city;
-      console.log(`GSM Simulator: Fallback localized phone prefix to ${resolvedCity} (${targetLat}, ${targetLng})`);
-    }
+    // 1. Resolve high-precision lost phone location strictly based on the entered phone number's telecom registration node and area code
+    const resolvedLoc = resolveTargetLocation(phoneNumber, country);
+    const targetLat = resolvedLoc.lat;
+    const targetLng = resolvedLoc.lng;
+    const resolvedCity = resolvedLoc.city;
+    console.log(`GSM Simulator: Localized phone registration node to ${resolvedCity} (${targetLat}, ${targetLng})`);
 
     // Custom multi-phase console output steps to display tracker progress
     const steps = [
       "Accessing global wireless cellular directory database...",
       `Pinging towers for telephone number (${phoneNumber})...`,
       "Acquiring connection packet logs via Cellular Base Station Controller...",
-      targetLat 
-        ? "Triangulating local area receiver towers and physical baseband sectors..." 
-        : "Acquiring cellular triangulation vector metrics...",
+      "Triangulating local area receiver towers and physical baseband sectors...",
       `Validating registered device ownership matches: ${ownerName}...`,
       "Receiving remote telemetry coordinates... (Handshaking network dBm)",
       "Pinpoint locked! Triangulation complete within ±5 meters."

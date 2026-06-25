@@ -111,6 +111,46 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
     console.warn("Nominatim reverse geocode fetch unsuccessful, falling back to realistic local map database.");
   }
 
+  const usCities = [
+    { city: "New York City", state: "NY", postcode: "10001", lat: 40.7128, lng: -74.0060 },
+    { city: "Los Angeles", state: "CA", postcode: "90001", lat: 34.0522, lng: -118.2437 },
+    { city: "Chicago", state: "IL", postcode: "60601", lat: 41.8781, lng: -87.6298 },
+    { city: "Houston", state: "TX", postcode: "77001", lat: 29.7604, lng: -95.3698 },
+    { city: "Dallas", state: "GA", postcode: "30132", lat: 33.9237, lng: -84.8408 },
+    { city: "San Francisco", state: "CA", postcode: "94101", lat: 37.7749, lng: -122.4194 },
+    { city: "Seattle", state: "WA", postcode: "98101", lat: 47.6062, lng: -122.3321 },
+    { city: "Miami", state: "FL", postcode: "33101", lat: 25.7617, lng: -80.1918 },
+    { city: "Boston", state: "MA", postcode: "02101", lat: 42.3601, lng: -71.0589 },
+    { city: "Austin", state: "TX", postcode: "78701", lat: 30.2672, lng: -97.7431 },
+    { city: "Las Vegas", state: "NV", postcode: "89101", lat: 36.1716, lng: -115.1398 }
+  ];
+
+  const inCities = [
+    { city: "Bengaluru", state: "Karnataka", postcode: "560001", lat: 12.9716, lng: 77.5946 },
+    { city: "Mumbai", state: "Maharashtra", postcode: "400001", lat: 19.0760, lng: 72.8777 },
+    { city: "Delhi", state: "Delhi", postcode: "110001", lat: 28.6139, lng: 77.2090 },
+    { city: "Kolkata", state: "West Bengal", postcode: "700001", lat: 22.5726, lng: 88.3639 },
+    { city: "Chennai", state: "Tamil Nadu", postcode: "600001", lat: 13.0827, lng: 80.2707 },
+    { city: "Hyderabad", state: "Telangana", postcode: "500001", lat: 17.3850, lng: 78.4867 },
+    { city: "Pune", state: "Maharashtra", postcode: "411001", lat: 18.5204, lng: 73.8567 },
+    { city: "Ahmedabad", state: "Gujarat", postcode: "380001", lat: 23.0225, lng: 72.5714 },
+    { city: "Jaipur", state: "Rajasthan", postcode: "302001", lat: 26.9124, lng: 75.7873 },
+    { city: "Coimbatore", state: "Tamil Nadu", postcode: "641001", lat: 11.0168, lng: 76.9558 },
+    { city: "Lucknow", state: "Uttar Pradesh", postcode: "226001", lat: 26.8467, lng: 80.9462 },
+    { city: "Kochi", state: "Kerala", postcode: "682001", lat: 9.9312, lng: 76.2673 }
+  ];
+
+  const cities = zone === "US" ? usCities : inCities;
+  let nearest = cities[0];
+  let minDistance = Infinity;
+  for (const c of cities) {
+    const dist = Math.pow(c.lat - lat, 2) + Math.pow(c.lng - lng, 2);
+    if (dist < minDistance) {
+      minDistance = dist;
+      nearest = c;
+    }
+  }
+
   // Fallback to high-fidelity street addresses based on zone
   if (zone === "IN") {
     const flat = flatNamesIN[numSeed % flatNamesIN.length];
@@ -118,39 +158,38 @@ async function getReverseGeocode(lat: number, lng: number, country: string, isHi
       "12th Main Road, HAL 2nd Stage",
       "CMH Road, Lakshmipuram",
       "100 Feet Road",
-      "80 Feet Road, Koramangala 4th Block",
-      "MG Road, Ashok Nagar"
+      "80 Feet Road, Sector 4",
+      "MG Road, Central Zone"
     ];
     const areas = [
-      "Indiranagar",
-      "Koramangala",
-      "Ashok Nagar",
-      "HAL Stage 2",
-      "Lakshmipuram"
+      "Subdivision A",
+      "Central Market Area",
+      "Green View Sector",
+      "Garrison Area",
+      "Residential Hub"
     ];
     const street = streets[(numSeed + 1) % streets.length];
     const area = areas[(numSeed + 2) % areas.length];
-    return `${flat}, ${street}, ${area}, Bengaluru, Karnataka, 560038, India`;
+    return `${flat}, ${street}, ${area}, ${nearest.city}, ${nearest.state}, ${nearest.postcode}, India`;
   } else {
     const flat = flatNamesUS[numSeed % flatNamesUS.length];
     const streets = [
-      "Hardee Street",
-      "W Memorial Drive",
-      "Dallas Acworth Hwy",
-      "Merchant Drive",
-      "Paulding Plaza",
-      "Main Street"
+      "Main Street",
+      "Grand Avenue",
+      "Pine Road",
+      "Oak Drive",
+      "Parkway Avenue"
     ];
     const areas = [
-      "Downtown Dallas Area",
-      "Paulding County Area",
-      "Silver Ridge Subdivision",
-      "Country Lake Club",
-      "Laurel Springs Sector"
+      "Downtown Area",
+      "West End District",
+      "Northside Sub",
+      "Valley View Sector",
+      "Commercial Center"
     ];
     const street = streets[(numSeed + 1) % streets.length];
     const area = areas[(numSeed + 2) % areas.length];
-    return `${flat}, ${street}, ${area}, Dallas, Georgia, 30132, USA`;
+    return `${flat}, ${street}, ${area}, ${nearest.city}, ${nearest.state}, ${nearest.postcode}, USA`;
   }
 }
 
